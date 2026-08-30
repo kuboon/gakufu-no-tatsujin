@@ -29,9 +29,10 @@ export { base };
  * Where the crawl starts.
  *
  * Everything else is reached by following links, so the blog index listing its articles is what
- * makes them part of the site.
+ * makes them part of the site. `/about` is named here because the home page is the game and the
+ * game fills the viewport: it carries no site chrome to link out from.
  */
-export const entryPoints: readonly string[] = ["/"];
+export const entryPoints: readonly string[] = ["/", "/about"];
 
 /** Where this deploys. The build writes the file this rule would serve. */
 export const fileServer: FileServerBehavior = githubPages();

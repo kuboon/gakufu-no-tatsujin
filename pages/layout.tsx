@@ -16,6 +16,10 @@ import { Link } from "./lib/link.tsx";
 export interface LayoutProps {
   title: string;
   description?: string;
+  /** Document language. English unless a page says otherwise. */
+  lang?: string;
+  /** A bare page fills the viewport itself: no header, no footer, no zooming. */
+  bare?: boolean;
   /** Deploy path prefix, so every URL in the shell carries it. */
   base: string;
   /** Name -> chunk URL for the islands this page places. Empty on a page with none. */
@@ -30,15 +34,21 @@ export interface LayoutProps {
  * @returns The complete HTML document
  */
 export async function renderPage(props: LayoutProps): Promise<string> {
-  const { base, islandUrls } = props;
+  const { base, islandUrls, bare = false } = props;
   const chunks = [...new Set(Object.values(islandUrls))];
   const home = base === "" ? "/" : base;
 
   const html = await renderToString(
-    <html lang="en">
+    <html lang={props.lang ?? "en"}>
       <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta
+          name="viewport"
+          content={bare
+            ? "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+            : "width=device-width, initial-scale=1"}
+        />
+        {bare ? <meta name="theme-color" content="#0a0e22" /> : null}
         <title>{props.title}</title>
         {props.description
           ? <meta name="description" content={props.description} />
@@ -46,24 +56,30 @@ export async function renderPage(props: LayoutProps): Promise<string> {
         <link rel="icon" href={`${base}/static/favicon.svg`} />
         <link rel="stylesheet" href={`${base}/static/styles.css`} />
       </head>
-      <body>
-        <header class="site-header">
-          <Link class="brand" href={home}>remix-ssg</Link>
-          <nav class="site-nav">
-            <Link href={home}>Home</Link>
-            <Link href={`${base}/about`}>About</Link>
-            <Link href={`${base}/blog`}>Blog</Link>
-          </nav>
-        </header>
-        <main class="site-main">{props.children}</main>
-        <footer class="site-footer">
-          <p>
-            Built with{" "}
-            <a href="https://jsr.io/@kuboon/remix-ssg">@kuboon/remix-ssg</a> and
-            {" "}
-            <a href="https://remix.run">Remix v3</a>.
-          </p>
-        </footer>
+      <body class={bare ? "bare" : undefined}>
+        {bare ? null : (
+          <header class="site-header">
+            <Link class="brand" href={home}>楽譜の達人</Link>
+            <nav class="site-nav">
+              <Link href={home}>ゲーム</Link>
+              <Link href={`${base}/about`}>About</Link>
+              <Link href={`${base}/blog`}>Blog</Link>
+            </nav>
+          </header>
+        )}
+        {bare
+          ? props.children
+          : <main class="site-main">{props.children}</main>}
+        {bare ? null : (
+          <footer class="site-footer">
+            <p>
+              Built with{" "}
+              <a href="https://jsr.io/@kuboon/remix-ssg">@kuboon/remix-ssg</a>
+              {" "}
+              and <a href="https://remix.run">Remix v3</a>.
+            </p>
+          </footer>
+        )}
         {chunks.length > 0
           ? (
             <>
