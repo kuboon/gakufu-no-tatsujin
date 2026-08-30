@@ -82,14 +82,19 @@ export const SONGS: readonly Song[] = [
   song({
     id: "sakura",
     title: "さくら さくら",
-    credit: "日本古謡（みじかい版）",
-    lead: "ゆっくり歌う都節。二分音符と全音符で息をつぐ。",
+    credit: "日本古謡",
+    lead: "都節の音階。低いミとドまで下りて、最後は全音符でしめる。",
     difficulty: 2,
     bpm: 72,
     beatsPerBar: 4,
     score: `
-      A4 A4 B4:2 | A4 A4 B4:2 | A4 B4 C5 B4 | A4 B4 A4:2 |
-      A4 A4 B4:2 | A4 A4 B4:2 | A4 B4 A4 F4 | E4:4
+      A4 A4 B4:2            | A4 A4 B4:2                 |
+      A4 B4 C5 B4           | A4 B4:.5 A4:.5 F4:2        |
+      E4 C4 E4 F4           | E4 E4:.5 C4:.5 C4:2        |
+      A4 B4 C5 B4           | A4 B4:.5 A4:.5 F4:2        |
+      E4 C4 E4 F4           | E4 E4:.5 C4:.5 C4:2        |
+      A4 A4 B4:2            | A4 A4 B4:2                 |
+      E4 F4 B4:.5 A4:.5 F4  | E4:4
     `,
   }),
 ];
