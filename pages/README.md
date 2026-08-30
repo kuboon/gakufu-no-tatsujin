@@ -33,6 +33,7 @@ generator straight from JSR.
 ```sh
 deno task dev     # local dev server at http://localhost:8000
 deno task build   # generate the static site into dist/
+deno task test    # the pure modules behind the game
 deno task check   # type-check, lint, and format-check
 ```
 
@@ -46,6 +47,7 @@ remote main module reads a project's config only when it is told to.
 ```
 pages/
   deno.json          # tasks, imports, permission sets, compiler + JSX options
+  tests/             # the pure modules behind the game, exercised without a browser
   deno.lock          # pinned dependency versions (committed)
   router.ts          # the wiring — three directories into one handler
   layout.tsx         # the HTML document shell
@@ -58,12 +60,19 @@ pages/
     markdown.ts      # Markdown → a Remix UI tree (@kuboon/md)
     link.tsx         # internal <Link> (full-document navigation)
   pages/
-    index.tsx        # home — places both islands
-    about.tsx
+    index.tsx        # home — the game, filling the viewport
+    about.tsx        # how the game works, and how the site is built
     blog/
       index.tsx      # lists the articles beside it
       *.md           # the articles
   islands/
+    game.tsx         # the game: song list, play screen, score
+    songs.ts         # the melodies, written as bars of note names
+    music.ts         # pitch -> colour, pitch -> staff position, duration -> shape
+    staff.ts         # the scrolling staff, drawn on a canvas
+    keyboard.ts      # which keys a song needs, and where each one sits
+    session.ts       # the clock, the judging, the frame loop
+    audio.ts         # a small synthesised piano, and the clock it keeps
     counter.tsx      # a hydrated island, and its own browser entrypoint
     total.tsx        # a second island/entrypoint, sharing state with it
     store.ts         # the module both islands import — the shared singleton
@@ -79,12 +88,50 @@ Drop a file in `pages/` and link to it.
 - A `.tsx` file exports a component (and optionally `title`, `description`, and
   the `islands` it places), rendered by `transforms/page.tsx`.
 
+A `.tsx` page may also export `bare` and `lang`. A bare page gets the viewport
+to itself — no header, no footer, no pinch-zoom — which is what the game's page
+uses.
+
 The crawl starts at `entryPoints` in `router.ts` and follows links, so **what is
 reachable is what gets generated**. A page nothing links to belongs in
-`entryPoints`, or it is not part of the site.
+`entryPoints`, or it is not part of the site. That is why `/about` is named
+there: the home page is the game, and a bare page carries no nav to link out
+from.
 
 That is also why `pages/blog/index.tsx` reads the `.md` files beside it: listing
 them is what makes them reachable.
+
+## The game
+
+`pages/index.tsx` places one island, `islands/game.tsx`, and that island is the
+whole of 楽譜の達人. It re-renders three times a song — song list, play screen,
+score — and not once in between: while a song is playing the staff belongs to a
+canvas and the keys light up by toggling a class on the elements they already
+have.
+
+The pieces behind it are ordinary modules rather than islands, so
+`deno task
+test` can exercise them without a browser:
+
+|               |                                                                              |
+| ------------- | ---------------------------------------------------------------------------- |
+| `music.ts`    | pitch → hue, pitch → staff step, duration → note shape, and the score reader |
+| `songs.ts`    | the melodies                                                                 |
+| `staff.ts`    | one function per frame: lines, bar lines, notes, judgement line, HUD         |
+| `keyboard.ts` | the key layout, as fractions of the keyboard's width                         |
+| `session.ts`  | when each note is due, what a key press is worth, and the loop               |
+| `audio.ts`    | the tone, and the clock                                                      |
+
+Two decisions are worth knowing about. The game clock is the `AudioContext`'s
+own clock, so a note you hear and a note you see cannot drift apart; if that
+context is missing or suspended, `audio.ts` hands back a wall clock that carries
+the offset across, so the song never jumps at the seam. And a melody is written
+as bars of note names — `C4 D4 E4:2 | G4 E4 D4 C4` — where every bar has to add
+up to the time signature, so a typo is a build error rather than a melody that
+quietly drifts out of its bar lines.
+
+To add a song, add an entry to `islands/songs.ts`. Everything else — the note
+times, the bar count, which keys the keyboard shows — is derived from it.
 
 ## Markdown content
 

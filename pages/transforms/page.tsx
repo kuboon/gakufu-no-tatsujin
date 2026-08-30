@@ -18,6 +18,10 @@ export interface PageModule {
   description?: string;
   /** Names of the islands this page places, from `islands/`. */
   islands?: readonly string[];
+  /** Document language, when it is not the site's English. */
+  lang?: string;
+  /** Drops the site chrome, for a page that wants the whole viewport. */
+  bare?: boolean;
 }
 
 export function page(
@@ -54,6 +58,8 @@ export function page(
           title: module.title ?? file.path,
           description: module.description,
           base: context.base,
+          lang: module.lang,
+          bare: module.bare,
           islandUrls,
           children: await module.default(),
         }),

@@ -1,31 +1,147 @@
-# remix3-ssg-gh-pages
+# 楽譜の達人
 
-A [Remix v3](https://remix.run) static-site starter built on
-[`@kuboon/remix-ssg`](https://jsr.io/@kuboon/remix-ssg) and deployed to GitHub
-Pages with per-PR previews.
+音の高さを色で読む、スマホ横持ちのリズムゲームです。
+曲を選ぶとプレイ画面に移り、画面の上半分を五線譜が右から左へ流れます。
+音符が判定線に届いた瞬間に、下半分の鍵盤で同じ色の鍵を押してください。
 
-The site is content and one `router.ts` that wires three directories into a
-handler. `deno serve router.ts` is the dev server; the build crawls the same
-handler straight from JSR, so there is no build script in this repository.
-Islands are code-split out of one graph, so a module two of them share is
-emitted once — and the home page shows what that buys.
+`main` の内容は <https://kuboon.github.io/gakufu-no-tatsujin/> に公開されます。
+プルリクエストごとのプレビューURLは、ワークフローがPRにコメントします。
 
-The site lives in [`pages/`](./pages) — see [`pages/README.md`](./pages/README.md)
-for how it works and how to develop it.
+## 遊びかた
+
+判定はバッチリ、ナイス、ミスの3段階です。
+続けて当てるとコンボが伸び、最後に点数とランク（S から C）が出ます。
+弾く前に曲を聴きたいときは、「おてほん」を押すと自動演奏に切り替わります。
+
+鍵盤は指でタップします。
+複数の指で同時に押せます。
+パソコンでは、白鍵がホームポジションの A から順に、黒鍵がその一段上のキーに並びます。
+
+横向きの画面を前提にしています。
+縦向きのときは「画面を よこ向きに してね」の案内が全面に出て、演奏中であれば時計も止まります。
+案内はCSSのメディアクエリで出しているので、JavaScriptが動き出す前から効きます。
+
+## 音と色
+
+1オクターブの十二音に、色相環を十二等分した色を割り当てています。
+ドが0度の赤で、半音上がるごとに30度ずつ回ります。
+
+| 音 | ド | ド♯ | レ | レ♯ | ミ | ファ | ファ♯ | ソ | ソ♯ | ラ | ラ♯ | シ |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 色相 | 0° | 30° | 60° | 90° | 120° | 150° | 180° | 210° | 240° | 270° | 300° | 330° |
+
+同じ音は、五線譜の音符でも鍵盤でも同じ色になります。
+オクターブが変わっても色は変わりません。
+音名が読めなくても、色をたよりに押す鍵を決められます。
+
+リズムは二重に描いています。
+ひとつは音符が判定線に届くタイミングそのもの、もうひとつは音符の形です。
+全音符は白い丸、二分音符は白い丸に棒、四分音符は黒い丸に棒、八分音符は黒い丸に棒と旗で書き、付点も表せます。
+形が読めれば、次の小節を弾く前に長さが分かります。
+小節の区切りには縦線を引き、小節番号も添えています。
+
+## 収録曲
+
+| 曲 | 出典 | 速さ | 小節 | 難しさ |
+| --- | --- | --- | --- | --- |
+| さいた さいた | チューリップ（近藤宮子 作詞、井上武士 作曲） | 4/4、♩=104 | 12 | ★☆☆ |
+| こいぬのマーチ | 外国曲（久野静夫 作詞） | 4/4、♩=108 | 8 | ★★★ |
+| さくら さくら | 日本古謡 | 4/4、♩=72 | 8 | ★★☆ |
+
+収録しているのは旋律データだけで、歌詞は含みません。
+出典はゲーム内の曲カードにも表示しています。
+
+「こいぬのマーチ」は「ミドミドミソソ／ファレレ ミドド」を軸にした簡易編曲です。
+「さくら さくら」は旋律を確認できた範囲だけを使った短い版で、「さくら さくら」「のやまも さとも」「さくら さくら」「はなざかり」の8小節です。
+中間部（「みわたすかぎり」から「あさひににおう」まで）は出典を確認できなかったため入れていません。
+
+## 曲を足す
+
+曲は `pages/islands/songs.ts` の1エントリです。
+音の時刻、小節数、鍵盤が出す鍵の範囲は、いずれもここから導出します。
+
+```ts
+song({
+  id: "tulip",
+  title: "さいた さいた",
+  credit: "チューリップ／近藤宮子 作詞・井上武士 作曲",
+  lead: "ドレミだけで始まる、いちばんやさしい一曲。",
+  difficulty: 1,
+  bpm: 104,
+  beatsPerBar: 4,
+  score: `
+    C4 D4 E4:2 | C4 D4 E4:2 | G4 E4 D4 C4 | D4 E4 D4:2
+  `,
+});
+```
+
+`score` の書きかたは次のとおりです。
+
+- `|`：小節の区切り
+- トークン：音名（`C4` や `F#4`）と、`:` に続く拍数
+- 拍数の既定値：1拍（四分音符）
+- 拍数の例：`:4` が全音符、`:2` が二分音符、`:.5` が八分音符、`:1.5` が付点四分音符
+
+小節の合計拍数が拍子と合わなければ、読み込みの時点で例外になります。
+ビルドが失敗するので、書き間違いが静かに紛れ込むことはありません。
+
+## しくみ
+
+ゲームは `pages/islands/game.tsx` にあるひとつのアイランドです。
+再描画は曲選択、演奏、結果の3画面が切り替わるときだけで、演奏中は一度も起きません。
+流れる五線譜はキャンバスに描き、鍵盤の光りかたは既存の要素のクラスを付け外して変えています。
+
+時計には `AudioContext` のものを使っています。
+見えている音符と聞こえている音が同じ出来事になり、二つの時計が別々に進んでずれることがありません。
+コンテキストを開けない環境や中断された場合は、差分を持ち越した壁時計に切り替えるので、継ぎ目で曲が飛びません。
+
+残りのモジュールはアイランドではない普通のモジュールなので、ブラウザーなしで `deno task test` から呼べます。
+
+| ファイル | 役割 |
+| --- | --- |
+| `islands/music.ts` | 音高から色相と五線上の位置、音価から音符の形、楽譜の読み取り |
+| `islands/songs.ts` | 収録曲 |
+| `islands/staff.ts` | 流れる五線譜の描画 |
+| `islands/keyboard.ts` | 鍵の範囲と配置、パソコンのキーとの対応 |
+| `islands/session.ts` | 時計、判定、フレームループ |
+| `islands/audio.ts` | 簡易ピアノの音と、ゲームの時計 |
+
+サイトの土台は [Remix v3](https://remix.run) と
+[`@kuboon/remix-ssg`](https://jsr.io/@kuboon/remix-ssg) による静的サイト生成です。
+`pages/router.ts` が3つのディレクトリをひとつのハンドラーに束ね、`deno serve router.ts` がそれを開発サーバーとして動かします。
+ビルドは同じハンドラーを JSR から直接クロールするので、ビルドスクリプトはこのリポジトリにありません。
+詳しくは [`pages/README.md`](./pages/README.md) を参照してください。
+
+## 開発
+
+[Deno](https://deno.com) 2.x が必要です。
 
 ```sh
 cd pages
-deno task dev     # local dev server
-deno task build   # generate the static site into pages/dist
+deno task dev     # http://localhost:8000
+deno task build   # 静的サイトを pages/dist に生成
+deno task test    # ゲームの土台になっているモジュール
+deno task check   # 型検査、lint、フォーマット
 ```
 
-## Deployment
+サブパスに置いたときの動きを手元で見るには、`BASE_URL` を渡します。
 
-`.github/workflows/pages.yml` calls the reusable
-`kuboon/workflows/.github/workflows/github-page-with-preview.yaml` workflow. It
-builds `main` at the Pages root and each pull request under a preview sub-path,
-deploys both to GitHub Pages, and comments the preview URL on the PR. The build
-runs via [`mise`](https://mise.jdx.dev) (`mise.toml`), which installs Deno and
-runs `deno task build` with the correct `BASE_URL`.
+```sh
+BASE_URL=http://localhost:8000/gakufu-no-tatsujin deno task dev
+```
 
-To enable it: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+## デプロイ
+
+`.github/workflows/pages.yml` が、再利用可能ワークフロー
+`kuboon/workflows/.github/workflows/github-page-with-preview.yaml` を呼びます。
+`main` を GitHub Pages のルートに、各プルリクエストをプレビュー用のサブパスに置き、プレビューURLをPRにコメントします。
+ビルドは [`mise`](https://mise.jdx.dev)（`mise.toml`）経由で Deno を入れ、正しい `BASE_URL` で `deno task build` を実行します。
+
+リポジトリ側で一度だけ設定が必要です。
+**Settings → Pages → Build and deployment → Source: GitHub Actions** を選んでください。
+これがないと `actions/configure-pages` が `Get Pages site failed` で止まります。
+
+## ライセンス
+
+コードは MIT ライセンスです（[LICENSE](./LICENSE)）。
+収録曲の旋律については、上の表のクレジットを参照してください。
