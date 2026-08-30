@@ -34,6 +34,8 @@ const POINTS: Record<NoteState, number> = {
 /** How a play-through ended. */
 export interface Result {
   song: Song;
+  /** Whether the demo player was on at any point, which rules out achievements. */
+  usedAuto: boolean;
   score: number;
   maxCombo: number;
   perfect: number;
@@ -73,6 +75,7 @@ export class Session {
   #running = false;
   #frame = 0;
   #auto = false;
+  #autoUsed = false;
 
   #score = 0;
   #combo = 0;
@@ -113,6 +116,8 @@ export class Session {
 
   set auto(on: boolean) {
     this.#auto = on;
+    // Sticky: turning it back off does not make the notes you skipped yours.
+    if (on) this.#autoUsed = true;
   }
 
   /** Takes over the canvas and starts the clock. Runs until the signal aborts. */
@@ -303,6 +308,7 @@ export class Session {
       : (this.#counts.perfect + hit) / (total * 2);
     return {
       song: this.song,
+      usedAuto: this.#autoUsed,
       score: this.#score,
       maxCombo: this.#maxCombo,
       perfect: this.#counts.perfect,

@@ -10,7 +10,14 @@ import { on, ref } from "@remix-run/ui";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
+import {
+  achievement,
+  earned,
+  readProgress,
+  recordProgress,
+} from "./achievements.ts";
 import { Tones } from "./audio.ts";
+import { GAME_PAGE, report, type Unlocked } from "./gamecenter.ts";
 import {
   keyboardLayout,
   type KeyCap,
@@ -40,6 +47,7 @@ export const Game = island(
     let result: Result | null = null;
     let session: Session | null = null;
     let auto = false;
+    let unlocked: Unlocked[] | null = null;
 
     // Held sideways is the only way to play, so a portrait phone stops the clock rather than
     // running the song out behind the notice.
@@ -65,6 +73,7 @@ export const Game = island(
       session = new Session({ song, tones, onFinish: finish });
       session.auto = auto;
       result = null;
+      unlocked = null;
       phase = "play";
       void handle.update();
     }
@@ -73,6 +82,27 @@ export const Game = island(
       result = finished;
       session = null;
       phase = "result";
+      unlocked = null;
+      void handle.update();
+      void award(finished);
+    }
+
+    /**
+     * Reports what the play-through earned, then shows what came back.
+     *
+     * The screen is already up by the time this runs: reaching the hub can
+     * take a moment, and the score should not wait on it.
+     */
+    async function award(finished: Result): Promise<void> {
+      const before = readProgress();
+      const won = earned(finished, before);
+      recordProgress(finished, before);
+      if (won.length === 0) return;
+
+      const results = await report(won);
+      // A slow answer must not land on a screen that has moved on.
+      if (result !== finished) return;
+      unlocked = results;
       void handle.update();
     }
 
@@ -195,6 +225,14 @@ export const Game = island(
             >
               全画面
             </button>
+            <a
+              class="toggle"
+              href={GAME_PAGE}
+              target="_blank"
+              rel="noopener"
+            >
+              実績
+            </a>
             <span class="select__hint">
               スマホは横向き・パソコンは A〜L キーでも弾けます
             </span>
@@ -251,6 +289,52 @@ export const Game = island(
       );
     }
 
+    /**
+     * What the play-through earned.
+     *
+     * An achievement the hub could not take on its own comes back with a claim
+     * URL, and that URL is the chip itself: a link the player chose to follow
+     * survives a popup blocker, and shows them what is about to be recorded.
+     */
+    function awards(): RemixNode {
+      if (unlocked === null || unlocked.length === 0) return null;
+
+      return (
+        <ul class="awards">
+          {unlocked.map((entry) => {
+            const won = achievement(entry.key);
+            if (won === undefined) return null;
+            const label = (
+              <>
+                <span class="award__title">{won.title}</span>
+                {won.points > 0
+                  ? <span class="award__points">+{won.points}</span>
+                  : null}
+              </>
+            );
+
+            return (
+              <li key={entry.key} class="award">
+                {entry.recorded
+                  ? <span class="award__chip is-recorded">{label}</span>
+                  : (
+                    <a
+                      class="award__chip"
+                      href={entry.claimUrl}
+                      target="_blank"
+                      rel="noopener"
+                    >
+                      {label}
+                      <span class="award__claim">記録する</span>
+                    </a>
+                  )}
+              </li>
+            );
+          })}
+        </ul>
+      );
+    }
+
     function resultScreen(): RemixNode {
       const summary = result;
       if (summary === null) return selectScreen();
@@ -281,6 +365,7 @@ export const Game = island(
               <strong>{summary.maxCombo}</strong>
             </li>
           </ul>
+          {awards()}
           <div class="result__actions">
             <button
               type="button"

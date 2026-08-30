@@ -576,3 +576,50 @@ body.bare {
   border-radius: 50%;
   box-shadow: 0 0 0 1px var(--border);
 }
+
+/* --- what a play-through earned --- */
+
+.awards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.4rem;
+  max-width: 34rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.award__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  font-size: clamp(0.66rem, 2vh, 0.8rem);
+  border-radius: 999px;
+  border: 1px solid rgba(255, 214, 107, 0.55);
+  color: #ffd66b;
+  background: rgba(255, 214, 107, 0.1);
+  text-decoration: none;
+}
+
+.award__chip.is-recorded {
+  border-color: rgba(126, 240, 178, 0.55);
+  color: #7ef0b2;
+  background: rgba(126, 240, 178, 0.1);
+}
+
+.award__title {
+  font-weight: 700;
+}
+
+.award__points {
+  opacity: 0.75;
+}
+
+.award__claim {
+  padding-left: 0.4rem;
+  border-left: 1px solid currentColor;
+  opacity: 0.85;
+  text-decoration: underline;
+}
