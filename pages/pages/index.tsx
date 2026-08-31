@@ -35,13 +35,13 @@ const manifest = {
   achievements: ACHIEVEMENTS,
 };
 
+/** The manifest rides in the document head, beside the rest of the metadata. */
+export const head: RemixNode = (
+  <script type="application/gamecenter+json">
+    {JSON.stringify(manifest, null, 2)}
+  </script>
+);
+
 export default function Home(): RemixNode {
-  return (
-    <>
-      <script type="application/gamecenter+json">
-        {JSON.stringify(manifest, null, 2)}
-      </script>
-      <Game />
-    </>
-  );
+  return <Game />;
 }

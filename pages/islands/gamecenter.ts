@@ -18,11 +18,10 @@ import type { Earned } from "./achievements.ts";
 /**
  * The author's game-center handle, as the hub's `/me` page shows it.
  *
- * TODO: replace with the real handle. It is an opaque identifier that only the
- * author can read off the hub, and the registration fails with a 404 until it
- * names an account that exists.
+ * An opaque identifier rather than a name: the hub seeds it from the identity
+ * provider's user id, so it is not something to derive from a GitHub login.
  */
-export const AUTHOR = "REPLACE-WITH-YOUR-GAME-CENTER-HANDLE";
+export const AUTHOR = "7499d00d-fcff-4630-91a0-c034893c8d08";
 
 /** The game's slug. Unique among this author's games rather than globally. */
 export const SLUG = "gakufu-no-tatsujin";
