@@ -1,5 +1,7 @@
 import type { RemixNode } from "@remix-run/ui";
 
+import { ACHIEVEMENTS } from "../islands/achievements.ts";
+import { AUTHOR, SLUG } from "../islands/gamecenter.ts";
 import { Game } from "../islands/game.tsx";
 
 export const title = "楽譜の達人 — 色で読む五線譜リズムゲーム";
@@ -13,6 +15,32 @@ export const islands: readonly string[] = ["game"];
 export const bare = true;
 
 export const lang = "ja";
+
+/**
+ * What game-center reads off this page.
+ *
+ * The hub fetches this URL and looks for this script, so the page *is* the
+ * registration: where the manifest was served from is what says it may be
+ * written, and no token travels in either direction. The browser ignores a
+ * `type` it does not know, so it costs the game nothing.
+ */
+const manifest = {
+  $schema: "https://ga-cen.kbn.one/schema/gamecenter.json",
+  id: SLUG,
+  author: AUTHOR,
+  title: "楽譜の達人",
+  description:
+    "音の高さを色で読む、スマホ横持ちのリズムゲーム。五線譜が右から左へ流れ、下半分の鍵盤で同じ色の鍵を押します。",
+  icon: "static/favicon.svg",
+  achievements: ACHIEVEMENTS,
+};
+
+/** The manifest rides in the document head, beside the rest of the metadata. */
+export const head: RemixNode = (
+  <script type="application/gamecenter+json">
+    {JSON.stringify(manifest, null, 2)}
+  </script>
+);
 
 export default function Home(): RemixNode {
   return <Game />;

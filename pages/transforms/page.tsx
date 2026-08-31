@@ -20,6 +20,8 @@ export interface PageModule {
   islands?: readonly string[];
   /** Document language, when it is not the site's English. */
   lang?: string;
+  /** Anything else this page needs in the document head. */
+  head?: RemixNode;
   /** Drops the site chrome, for a page that wants the whole viewport. */
   bare?: boolean;
 }
@@ -59,6 +61,7 @@ export function page(
           description: module.description,
           base: context.base,
           lang: module.lang,
+          head: module.head,
           bare: module.bare,
           islandUrls,
           children: await module.default(),

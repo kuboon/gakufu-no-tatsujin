@@ -18,6 +18,8 @@ export interface LayoutProps {
   description?: string;
   /** Document language. English unless a page says otherwise. */
   lang?: string;
+  /** Anything the page adds to the document head. */
+  head?: RemixNode;
   /** A bare page fills the viewport itself: no header, no footer, no zooming. */
   bare?: boolean;
   /** Deploy path prefix, so every URL in the shell carries it. */
@@ -55,6 +57,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
           : null}
         <link rel="icon" href={`${base}/static/favicon.svg`} />
         <link rel="stylesheet" href={`${base}/static/styles.css`} />
+        {props.head}
       </head>
       <body class={bare ? "bare" : undefined}>
         {bare ? null : (

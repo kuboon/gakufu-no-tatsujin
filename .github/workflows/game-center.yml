@@ -1,0 +1,21 @@
+name: game-center
+
+# The hub reads the manifest off the published page rather than being handed it,
+# so registration has to wait for the deploy that published it.
+on:
+  workflow_run:
+    workflows: [pages]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  register:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # No secret: the call only asks the hub to re-read a document that is
+      # already public, and where it was served from is what vouches for it.
+      # `@main` because the action has no release tag yet.
+      - uses: kuboon/game-center/action@main
+        with:
+          url: https://kuboon.github.io/gakufu-no-tatsujin/
