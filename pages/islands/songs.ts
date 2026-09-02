@@ -5,6 +5,7 @@
  * keyboard has to show — is derived from the score string, so adding a song is one entry here.
  */
 
+import type { ClefName } from "./clefs.ts";
 import { type Note, readScore } from "./music.ts";
 
 /** A playable melody. */
@@ -18,6 +19,8 @@ export interface Song {
   difficulty: number;
   bpm: number;
   beatsPerBar: number;
+  /** The clef the staff is drawn in. Treble unless a song sits too low for it. */
+  clef: ClefName;
   notes: readonly Note[];
   bars: number;
   /** Range the keyboard has to cover. */
@@ -33,15 +36,17 @@ interface SongSpec {
   difficulty: number;
   bpm: number;
   beatsPerBar: number;
+  clef?: ClefName;
   score: string;
 }
 
 function song(spec: SongSpec): Song {
-  const { score, ...rest } = spec;
+  const { score, clef = "treble", ...rest } = spec;
   const { notes, bars } = readScore(score, spec.beatsPerBar);
   const pitches = notes.map((note) => note.midi);
   return {
     ...rest,
+    clef,
     notes,
     bars,
     lowest: Math.min(...pitches),

@@ -7,8 +7,9 @@
  * the hub has never heard of.
  *
  * What survives between plays lives here too, in `localStorage`: which songs
- * have been finished, and the best score so far. Both are per-device
- * conveniences. The record that counts is the hub's.
+ * have been finished, the best score on each, and which achievements have come
+ * up. All of it is a per-device convenience — enough to put a score on a song
+ * card without a round trip. The record that counts is the hub's.
  */
 
 import type { Result } from "./session.ts";
@@ -103,9 +104,21 @@ export interface Earned {
 export interface Progress {
   /** Ids of the songs played to the end, without the demo player. */
   cleared: readonly string[];
-  /** Highest score so far. */
+  /** Highest score so far, over every song. */
   best: number;
+  /** Highest score per song id — what a song card carries. */
+  bests: Readonly<Record<string, number>>;
+  /** Every achievement this device has earned, so the shelf has a count. */
+  awards: readonly string[];
 }
+
+/** A device that has not played yet — and what the page is built with. */
+export const NO_PROGRESS: Progress = {
+  cleared: [],
+  best: 0,
+  bests: {},
+  awards: [],
+};
 
 /** How many combos in a row the combo achievement asks for. */
 const COMBO_TARGET = 20;
@@ -148,15 +161,21 @@ export function earned(result: Result, before: Progress): Earned[] {
 export function readProgress(): Progress {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === null) return { cleared: [], best: 0 };
+    if (stored === null) return NO_PROGRESS;
     const parsed = JSON.parse(stored) as Partial<Progress>;
     return {
       cleared: Array.isArray(parsed.cleared) ? parsed.cleared : [],
       best: typeof parsed.best === "number" ? parsed.best : 0,
+      // Both were added after the first release, so a record written by an
+      // older build is missing them rather than wrong.
+      bests: typeof parsed.bests === "object" && parsed.bests !== null
+        ? parsed.bests
+        : {},
+      awards: Array.isArray(parsed.awards) ? parsed.awards : [],
     };
   } catch {
     // A private window, or storage the browser will not hand over.
-    return { cleared: [], best: 0 };
+    return NO_PROGRESS;
   }
 }
 
@@ -165,15 +184,33 @@ export function readProgress(): Progress {
  *
  * @param result How the play-through ended
  * @param previous What this device remembered before it
+ * @param won What the play-through earned, from {@link earned}
  * @returns The progress including this play-through
  */
-export function recordProgress(result: Result, previous: Progress): Progress {
+export function recordProgress(
+  result: Result,
+  previous: Progress,
+  won: readonly Earned[] = [],
+): Progress {
   const cleared = new Set(previous.cleared);
   if (!result.usedAuto) cleared.add(result.song.id);
 
+  const score = result.usedAuto ? 0 : result.score;
+  const awards = new Set(previous.awards);
+  // Only keys the manifest declares, so trimming the achievement list can
+  // never leave a phantom behind in the count.
+  for (const entry of won) {
+    if (achievement(entry.key) !== undefined) awards.add(entry.key);
+  }
+
   const progress: Progress = {
     cleared: [...cleared],
-    best: Math.max(previous.best, result.usedAuto ? 0 : result.score),
+    best: Math.max(previous.best, score),
+    bests: {
+      ...previous.bests,
+      [result.song.id]: Math.max(previous.bests[result.song.id] ?? 0, score),
+    },
+    awards: [...awards],
   };
 
   try {

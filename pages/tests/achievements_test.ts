@@ -4,6 +4,7 @@ import {
   ACHIEVEMENTS,
   earned,
   type Progress,
+  recordProgress,
   SCORE_KEY,
 } from "../islands/achievements.ts";
 import type { Result } from "../islands/session.ts";
@@ -26,7 +27,12 @@ function played(over: Partial<Result> = {}): Result {
   };
 }
 
-const NOTHING: Progress = { cleared: [], best: 0 };
+/** What a device remembers, blank unless the test says otherwise. */
+function remembered(over: Partial<Progress> = {}): Progress {
+  return { cleared: [], best: 0, bests: {}, awards: [], ...over };
+}
+
+const NOTHING: Progress = remembered();
 
 function keys(result: Result, before: Progress = NOTHING): string[] {
   return earned(result, before).map((entry) => entry.key);
@@ -86,7 +92,7 @@ Deno.test("a run with only good hits is not perfect", () => {
 });
 
 Deno.test("the last unplayed song completes the set", () => {
-  const before: Progress = { cleared: ["tulip", "koinu"], best: 0 };
+  const before = remembered({ cleared: ["tulip", "koinu"] });
   assertEquals(
     keys(played({ song: songById("sakura") }), before).includes("all_songs"),
     true,
@@ -99,7 +105,7 @@ Deno.test("the last unplayed song completes the set", () => {
 });
 
 Deno.test("the score achievement waits for a personal best", () => {
-  const before: Progress = { cleared: [], best: 1200 };
+  const before = remembered({ best: 1200 });
   assertEquals(keys(played({ score: 900 }), before).includes(SCORE_KEY), false);
   assertEquals(keys(played({ score: 1300 }), before).includes(SCORE_KEY), true);
 
@@ -111,4 +117,41 @@ Deno.test("the score achievement waits for a personal best", () => {
 
 Deno.test("the demo player earns listening, and nothing else", () => {
   assertEquals(keys(played({ usedAuto: true })), ["listen_through"]);
+});
+
+Deno.test("progress keeps a best per song, and the achievements earned", () => {
+  const first = recordProgress(
+    played({ song: songById("tulip"), score: 1200 }),
+    NOTHING,
+    [{ key: "clear_tulip" }, { key: SCORE_KEY, score: 1200 }],
+  );
+  assertEquals(first.bests, { tulip: 1200 });
+  assertEquals(first.best, 1200);
+  assertEquals(first.awards, ["clear_tulip", SCORE_KEY]);
+
+  // A worse run on the same song leaves the record standing.
+  const again = recordProgress(
+    played({ song: songById("tulip"), score: 400 }),
+    first,
+  );
+  assertEquals(again.bests, { tulip: 1200 });
+
+  // Another song keeps its own record, and both count as cleared.
+  const both = recordProgress(
+    played({ song: songById("sakura"), score: 900 }),
+    again,
+  );
+  assertEquals(both.bests, { tulip: 1200, sakura: 900 });
+  assertEquals(both.best, 1200);
+  assertEquals(new Set(both.cleared), new Set(["tulip", "sakura"]));
+});
+
+Deno.test("the demo player leaves no score behind", () => {
+  const after = recordProgress(
+    played({ song: songById("tulip"), score: 9999, usedAuto: true }),
+    NOTHING,
+  );
+  assertEquals(after.cleared, []);
+  assertEquals(after.bests, { tulip: 0 });
+  assertEquals(after.best, 0);
 });
