@@ -12,7 +12,10 @@ import { island } from "@kuboon/remix-ssg/client";
 
 import {
   achievement,
+  ACHIEVEMENTS,
   earned,
+  NO_PROGRESS,
+  type Progress,
   readProgress,
   recordProgress,
 } from "./achievements.ts";
@@ -24,12 +27,15 @@ import {
   keyRange,
   typingMap,
 } from "./keyboard.ts";
-import { keyColor, noteColor, solfa } from "./music.ts";
+import { glowColor, keyColor, noteColor, solfa } from "./music.ts";
 import { type Song, SONGS } from "./songs.ts";
 import type { Result } from "./session.ts";
 import { Session } from "./session.ts";
 
 type Phase = "select" | "play" | "result";
+
+/** The white keys of one octave — the colour legend on the song list. */
+const LEGEND = [60, 62, 64, 65, 67, 69, 71];
 
 /** Elements that lock the screen to landscape, where the browser lets a page ask. */
 interface OrientationLock {
@@ -48,6 +54,12 @@ export const Game = island(
     let session: Session | null = null;
     let auto = false;
     let unlocked: Unlocked[] | null = null;
+    // Whether the run on screen beat this device's record for that song.
+    let beatBest = false;
+    // What this device remembers, once there is a browser to ask. The page is
+    // built ahead of time, so the first render has to be the blank one every
+    // visitor's HTML carries; the real record arrives a beat later.
+    let progress: Progress | null = null;
 
     // Held sideways is the only way to play, so a portrait phone stops the clock rather than
     // running the song out behind the notice.
@@ -58,6 +70,13 @@ export const Game = island(
         (event) => session?.setPaused(event.matches),
         { signal: handle.signal },
       );
+    }
+
+    /** Reads the stored record, the first time this runs in a browser. */
+    function loadProgress(): void {
+      if (progress !== null) return;
+      progress = readProgress();
+      void handle.update();
     }
 
     function keys(): KeyCap[] {
@@ -79,12 +98,17 @@ export const Game = island(
     }
 
     function finish(finished: Result): void {
+      // Read before anything is written: whether this is a personal best is a
+      // question about the record that stood when the song started.
+      const before = progress ?? readProgress();
+      beatBest = !finished.usedAuto &&
+        finished.score > (before.bests[finished.song.id] ?? 0);
       result = finished;
       session = null;
       phase = "result";
       unlocked = null;
       void handle.update();
-      void award(finished);
+      void award(finished, before);
     }
 
     /**
@@ -93,10 +117,9 @@ export const Game = island(
      * The screen is already up by the time this runs: reaching the hub can
      * take a moment, and the score should not wait on it.
      */
-    async function award(finished: Result): Promise<void> {
-      const before = readProgress();
+    async function award(finished: Result, before: Progress): Promise<void> {
       const won = earned(finished, before);
-      recordProgress(finished, before);
+      progress = recordProgress(finished, before, won);
       if (won.length === 0) return;
 
       const results = await report(won);
@@ -176,68 +199,137 @@ export const Game = island(
       );
     }
 
+    function fullscreenButton(): RemixNode {
+      return (
+        <button
+          type="button"
+          class="toggle"
+          mix={[on("click", () => void goFullscreen())]}
+        >
+          全画面
+        </button>
+      );
+    }
+
+    /**
+     * The song list.
+     *
+     * The grid fills the width rather than fixing a column count: there are
+     * three songs today and there will be more, and the list is meant to grow
+     * downwards into a scroll rather than squeeze.
+     */
     function selectScreen(): RemixNode {
+      const record = progress ?? NO_PROGRESS;
+
       return (
         <section class="select">
           <header class="select__head">
-            <h1 class="select__title">楽譜の達人</h1>
-            <p class="select__lead">
-              音の高さは色でおぼえる。流れてくる音符の形とタイミングでリズムを読む。
-            </p>
+            <div>
+              <h1 class="select__title">楽譜の達人</h1>
+              <p class="select__lead">
+                音の高さは色。流れてくる音符と同じ色の鍵をおす。
+              </p>
+            </div>
+            <div class="legend">
+              <span class="legend__label">音と色</span>
+              <span class="legend__keys">
+                {LEGEND.map((midi) => (
+                  <span
+                    key={midi}
+                    class="legend__key"
+                    style={`--face:${noteColor(midi)}`}
+                  >
+                    {solfa(midi)}
+                  </span>
+                ))}
+              </span>
+            </div>
           </header>
-          <ul class="songs">
-            {SONGS.map((choice) => (
-              <li key={choice.id}>
-                <button
-                  type="button"
-                  class="song"
-                  mix={[on("click", () => play(choice))]}
-                >
-                  <span class="song__title">{choice.title}</span>
-                  <span class="song__credit">{choice.credit}</span>
-                  <span class="song__lead">{choice.lead}</span>
-                  <span class="song__colors">
-                    {scaleOf(choice).map((midi) => (
-                      <span
-                        key={midi}
-                        class="dot"
-                        style={`background:${noteColor(midi)}`}
-                        title={solfa(midi)}
-                      >
+
+          <div class="select__body">
+            <ul class="songs" mix={[ref(loadProgress)]}>
+              {SONGS.map((choice) => (
+                <li key={choice.id}>
+                  <button
+                    type="button"
+                    class="song"
+                    title={choice.lead}
+                    mix={[on("click", () => play(choice))]}
+                  >
+                    <span class="song__head">
+                      <span class="song__title">{choice.title}</span>
+                      <span class="song__stars">
+                        {stars(choice.difficulty)}
                       </span>
-                    ))}
-                  </span>
-                  <span class="song__meta">
-                    <span class="song__stars">{stars(choice.difficulty)}</span>
-                    <span>{choice.bars}小節</span>
-                    <span>♩={choice.bpm}</span>
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
+                    </span>
+                    <span class="song__credit">
+                      {choice.bars}小節・{choice.credit}
+                    </span>
+                    <span class="song__colors">
+                      {scaleOf(choice).map((midi) => (
+                        <span
+                          key={midi}
+                          class="dot"
+                          style={`background:${noteColor(midi)}`}
+                          title={solfa(midi)}
+                        >
+                        </span>
+                      ))}
+                    </span>
+                    <span class="song__spacer"></span>
+                    {songState(choice, record)}
+                  </button>
+                </li>
+              ))}
+            </ul>
+            <div class="select__fade" aria-hidden="true"></div>
+          </div>
+
           <footer class="select__foot">
-            {autoButton()}
-            <button
-              type="button"
-              class="toggle"
-              mix={[on("click", () => void goFullscreen())]}
-            >
-              全画面
-            </button>
-            <a
-              class="toggle"
-              href={GAME_PAGE}
-              target="_blank"
-              rel="noopener"
-            >
-              実績
-            </a>
-            <span class="select__hint">
-              スマホは横向き・パソコンは A〜L キーでも弾けます
-            </span>
+            <div class="select__side">
+              {autoButton()}
+              <span class="select__hint">
+                スマホは横向き・パソコンは A〜L キーでも弾けます
+              </span>
+            </div>
+            <div class="select__side">
+              <a
+                class="toggle is-award"
+                href={GAME_PAGE}
+                target="_blank"
+                rel="noopener"
+              >
+                実績
+                <span class="toggle__count">
+                  {record.awards.length} / {ACHIEVEMENTS.length}
+                </span>
+              </a>
+              {fullscreenButton()}
+            </div>
           </footer>
         </section>
+      );
+    }
+
+    /** The one line under a song card: never played, or cleared and the best score. */
+    function songState(choice: Song, record: Progress): RemixNode {
+      const best = record.bests[choice.id] ?? 0;
+      if (!record.cleared.includes(choice.id)) {
+        return (
+          <span class="song__state">
+            <span aria-hidden="true">▷</span>
+            はじめて
+          </span>
+        );
+      }
+      return (
+        <span class="song__state is-cleared">
+          <span aria-hidden="true">✓</span>
+          クリア
+          {best > 0
+            ? <span class="song__best">{best.toLocaleString("ja-JP")}</span>
+            : null}
+        </span>
       );
     }
 
@@ -250,7 +342,7 @@ export const Game = island(
               {autoButton()}
               <button
                 type="button"
-                class="toggle"
+                class="stage__quit"
                 aria-label="曲をえらぶ"
                 mix={[on("click", quit)]}
               >
@@ -266,7 +358,9 @@ export const Game = island(
                 class={key.black ? "key key--black" : "key"}
                 style={`left:${percent(key.left)};width:${
                   percent(key.width)
-                };--face:${keyColor(key.midi)}`}
+                };--face:${keyColor(key.midi)};--cue:${
+                  noteColor(key.midi)
+                };--glow:${glowColor(key.midi)}`}
                 aria-label={solfa(key.midi)}
                 mix={[
                   ref((node, signal) =>
@@ -300,85 +394,140 @@ export const Game = island(
       if (unlocked === null || unlocked.length === 0) return null;
 
       return (
-        <ul class="awards">
-          {unlocked.map((entry) => {
-            const won = achievement(entry.key);
-            if (won === undefined) return null;
-            const label = (
-              <>
-                <span class="award__title">{won.title}</span>
-                {won.points > 0
-                  ? <span class="award__points">+{won.points}</span>
-                  : null}
-              </>
-            );
+        <div class="awards">
+          <span class="awards__label">もらった実績</span>
+          <ul class="awards__list">
+            {unlocked.map((entry) => {
+              const won = achievement(entry.key);
+              if (won === undefined) return null;
+              const label = (
+                <>
+                  <span class="award__title">{won.title}</span>
+                  {won.points > 0
+                    ? <span class="award__points">+{won.points}</span>
+                    : null}
+                </>
+              );
 
-            return (
-              <li key={entry.key} class="award">
-                {entry.recorded
-                  ? <span class="award__chip is-recorded">{label}</span>
-                  : (
-                    <a
-                      class="award__chip"
-                      href={entry.claimUrl}
-                      target="_blank"
-                      rel="noopener"
-                    >
-                      {label}
-                      <span class="award__claim">記録する</span>
-                    </a>
-                  )}
-              </li>
-            );
-          })}
-        </ul>
+              return (
+                <li key={entry.key} class="award">
+                  {entry.recorded
+                    ? <span class="award__chip is-recorded">{label}</span>
+                    : (
+                      <a
+                        class="award__chip"
+                        href={entry.claimUrl}
+                        target="_blank"
+                        rel="noopener"
+                      >
+                        {label}
+                        <span class="award__claim">記録する</span>
+                      </a>
+                    )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       );
     }
 
     function resultScreen(): RemixNode {
       const summary = result;
       if (summary === null) return selectScreen();
+      const next = nextSong(summary.song);
 
       return (
         <section class="result">
-          <p class="result__rank">{summary.rank}</p>
-          <h2 class="result__title">{summary.song.title}</h2>
-          <p class="result__score">
-            {summary.score}
-            <small>てん</small>
-          </p>
-          <ul class="result__stats">
-            <li>
-              <span>バッチリ</span>
-              <strong>{summary.perfect}</strong>
-            </li>
-            <li>
-              <span>ナイス</span>
-              <strong>{summary.good}</strong>
-            </li>
-            <li>
-              <span>ミス</span>
-              <strong>{summary.miss}</strong>
-            </li>
-            <li>
-              <span>最大コンボ</span>
-              <strong>{summary.maxCombo}</strong>
-            </li>
-          </ul>
-          {awards()}
-          <div class="result__actions">
-            <button
-              type="button"
-              class="primary"
-              mix={[on("click", () => play(summary.song))]}
-            >
-              もういちど
-            </button>
-            <button type="button" class="toggle" mix={[on("click", quit)]}>
-              ほかの曲
-            </button>
+          <div class="result__rank">
+            <span class="result__rank-label">ランク</span>
+            <span class="result__grade">{summary.rank}</span>
+            <span class="result__score">
+              <strong>{summary.score.toLocaleString("ja-JP")}</strong>
+              <span>てん</span>
+            </span>
+            {beatBest ? <span class="result__best">自己ベスト更新</span> : null}
+          </div>
+
+          <div class="result__main">
+            <div>
+              <h2 class="result__title">{summary.song.title}</h2>
+              <p class="result__note">{verdict(summary)}</p>
+            </div>
+
+            <ul class="result__stats">
+              <li class="is-perfect">
+                <span>バッチリ</span>
+                <strong>{summary.perfect}</strong>
+              </li>
+              <li class="is-good">
+                <span>ナイス</span>
+                <strong>{summary.good}</strong>
+              </li>
+              <li class="is-miss">
+                <span>ミス</span>
+                <strong>{summary.miss}</strong>
+              </li>
+              <li>
+                <span>最大コンボ</span>
+                <strong>{summary.maxCombo}</strong>
+              </li>
+            </ul>
+
+            {awards()}
+
+            <div class="result__actions">
+              <button
+                type="button"
+                class="primary"
+                mix={[on("click", () => play(next))]}
+              >
+                つぎの曲：{next.title}
+              </button>
+              <button
+                type="button"
+                class="toggle"
+                mix={[on("click", () => play(summary.song))]}
+              >
+                もういちど
+              </button>
+              <button type="button" class="toggle" mix={[on("click", quit)]}>
+                曲をえらぶ
+              </button>
+            </div>
           </div>
         </section>
+      );
+    }
+
+    /** The notice a portrait phone gets instead of the game. */
+    function rotateScreen(): RemixNode {
+      return (
+        <div class="rotate">
+          <div class="rotate__brand">
+            <p class="rotate__title">楽譜の達人</p>
+            <div class="rotate__hues">
+              {LEGEND.map((midi) => (
+                <span
+                  key={midi}
+                  class="dot"
+                  style={`background:${noteColor(midi)}`}
+                >
+                </span>
+              ))}
+            </div>
+          </div>
+          <div class="rotate__middle">
+            <div class="rotate__phone" aria-hidden="true"></div>
+            <div>
+              <p class="rotate__text">画面を よこ向きに してね</p>
+              <p class="rotate__sub">
+                五線譜と鍵盤が よこ長の画面いっぱいに出ます
+              </p>
+            </div>
+          </div>
+          <p class="rotate__foot">えんそう中なら、そのまま まっています</p>
+        </div>
       );
     }
 
@@ -389,10 +538,7 @@ export const Game = island(
           : phase === "play"
           ? playScreen()
           : resultScreen()}
-        <div class="rotate">
-          <div class="rotate__phone" aria-hidden="true"></div>
-          <p class="rotate__text">画面を よこ向きに してね</p>
-        </div>
+        {rotateScreen()}
       </div>
     );
   },
@@ -403,6 +549,24 @@ function scaleOf(song: Song): number[] {
   return [...new Set(song.notes.map((note) => note.midi))].sort((a, b) =>
     a - b
   );
+}
+
+/** The song after this one, wrapping round at the end of the list. */
+function nextSong(current: Song): Song {
+  const index = SONGS.findIndex((song) => song.id === current.id);
+  return SONGS[(index + 1) % SONGS.length];
+}
+
+/** One line on what the run was, so the four counts read as detail. */
+function verdict(result: Result): string {
+  if (result.usedAuto) {
+    return "おてほんで さいせいしました。じぶんで弾くと記録がのこります。";
+  }
+  if (result.miss === 0 && result.good === 0) return "全部バッチリ。文句なし。";
+  if (result.miss === 0) {
+    return `ミスなし。全部バッチリまで、あと ${result.good}つ。`;
+  }
+  return `ひろえなかったのが ${result.miss}つ。あと すこし。`;
 }
 
 function stars(difficulty: number): string {

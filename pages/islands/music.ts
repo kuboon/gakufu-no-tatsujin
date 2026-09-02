@@ -65,11 +65,22 @@ export function noteColor(midi: number, lightness = 58): string {
   return `hsl(${hue(midi)} 90% ${lightness}%)`;
 }
 
-/** The face colour of the key that plays it: pale for a white key, deep for a black one. */
+/** The same colour, translucent — the halo a cued key casts onto the bed. */
+export function glowColor(midi: number, alpha = 0.5): string {
+  return `hsl(${hue(midi)} 90% 58% / ${alpha})`;
+}
+
+/**
+ * The face colour of the key that plays it: tinted ivory for a white key, deep for a black one.
+ *
+ * Held below the note colour's saturation on purpose. The keys are half the screen, so a full-
+ * strength pastel row glares against the warm ground; the hue is what carries the pitch, and it
+ * survives the drop.
+ */
 export function keyColor(midi: number): string {
   return isBlackKey(midi)
-    ? `hsl(${hue(midi)} 65% 26%)`
-    : `hsl(${hue(midi)} 92% 84%)`;
+    ? `hsl(${hue(midi)} 55% 24%)`
+    : `hsl(${hue(midi)} 78% 80%)`;
 }
 
 /**

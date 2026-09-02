@@ -116,6 +116,11 @@ song({
 小節の合計拍数が拍子と合わなければ、読み込みの時点で例外になります。
 ビルドが失敗するので、書き間違いが静かに紛れ込むことはありません。
 
+音部記号は省略すると ト音記号です。
+低い曲はエントリに `clef: "bass"` を足すと、五線譜がヘ音記号で描かれます。
+記号の字形は [Bravura](https://github.com/steinbergmedia/bravura)（SIL OFL 1.1）から取った輪郭で、
+`pages/islands/clefs.ts` に置いています。
+
 ## しくみ
 
 ゲームは `pages/islands/game.tsx` にあるひとつのアイランドです。
@@ -133,9 +138,11 @@ song({
 | `islands/music.ts` | 音高から色相と五線上の位置、音価から音符の形、楽譜の読み取り |
 | `islands/songs.ts` | 収録曲 |
 | `islands/staff.ts` | 流れる五線譜の描画 |
+| `islands/clefs.ts` | ト音記号とヘ音記号の輪郭、五線上の基準位置 |
 | `islands/keyboard.ts` | 鍵の範囲と配置、パソコンのキーとの対応 |
 | `islands/session.ts` | 時計、判定、フレームループ |
 | `islands/audio.ts` | 簡易ピアノの音と、ゲームの時計 |
+| `islands/achievements.ts` | 実績の一覧、達成判定、この端末の記録 |
 
 サイトの土台は [Remix v3](https://remix.run) と
 [`@kuboon/remix-ssg`](https://jsr.io/@kuboon/remix-ssg) による静的サイト生成です。
@@ -175,4 +182,6 @@ BASE_URL=http://localhost:8000/gakufu-no-tatsujin deno task dev
 ## ライセンス
 
 コードは MIT ライセンスです（[LICENSE](./LICENSE)）。
+`pages/islands/clefs.ts` の音部記号の輪郭だけは Bravura 1.482 から取ったもので、
+SIL Open Font License 1.1（[LICENSES/OFL-1.1-Bravura.txt](./LICENSES/OFL-1.1-Bravura.txt)）に従います。
 収録曲の旋律については、上の表のクレジットを参照してください。
