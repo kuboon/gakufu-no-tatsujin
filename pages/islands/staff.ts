@@ -6,6 +6,7 @@
  * about to play can be read a bar ahead instead of only felt.
  */
 
+import { type Clef, type ClefName, CLEFS } from "./clefs.ts";
 import {
   isSharpened,
   noteColor,
@@ -38,22 +39,26 @@ export interface StageView {
   /** How many beats of music are visible to the right of the judgement line. */
   lookahead: number;
   notes: readonly NoteView[];
+  /** Which clef the staff is written in. */
+  clef: ClefName;
   score: number;
   combo: number;
+  /** The bar being played, counting from 1. */
+  bar: number;
+  /** How far through the song, 0 to 1. */
+  progress: number;
   flash: { state: NoteState; at: number } | null;
 }
 
-const BACKGROUND_TOP = "#141c3f";
-const BACKGROUND_BOTTOM = "#0a0e22";
-const STAFF_LINE = "rgba(226,232,255,0.42)";
-const BAR_LINE = "rgba(226,232,255,0.3)";
-const TEXT = "#e9ecff";
-const MUTED = "rgba(233,236,255,0.55)";
-
-/** Middle line of the treble staff, in diatonic steps. Stems turn over here. */
-const MIDDLE_STEP = staffStep(71);
-/** Bottom line of the treble staff. */
-const BOTTOM_STEP = staffStep(64);
+const BACKGROUND_TOP = "#2b1d15";
+const BACKGROUND_BOTTOM = "#1a120d";
+const STAFF_LINE = "rgba(250,238,222,0.42)";
+const BAR_LINE = "rgba(250,238,222,0.3)";
+const TEXT = "#fdf2e4";
+const MUTED = "rgba(253,242,228,0.55)";
+const ACCENT = "#ffc247";
+/** The band the readouts sit in, so notes never slide behind them. */
+const HUD_HEIGHT = 34;
 
 const FLASH_SECONDS = 0.5;
 const POP_SECONDS = 0.32;
@@ -67,9 +72,9 @@ const LABELS: Record<NoteState, string> = {
 
 const FLASH_COLORS: Record<NoteState, string> = {
   pending: TEXT,
-  perfect: "#ffd66b",
-  good: "#7ef0b2",
-  miss: "#ff8aa1",
+  perfect: ACCENT,
+  good: "#b7d94a",
+  miss: "#e0714a",
 };
 
 /** Where everything sits, once the canvas size is known. */
@@ -84,6 +89,10 @@ interface Metrics {
   hitX: number;
   clefRight: number;
   pixelsPerBeat: number;
+  /** The clef in force, and the two steps every other position is measured from. */
+  clef: Clef;
+  bottomStep: number;
+  middleStep: number;
 }
 
 /** The scrolling staff, drawn on a canvas. */
@@ -133,23 +142,27 @@ export class Stage {
   #metrics(view: StageView): Metrics {
     const width = this.#width;
     const height = this.#height;
-    const space = Math.min(height / 9.5, 34);
+    const space = Math.min((height - HUD_HEIGHT) / 8.5, 34);
     const hitX = Math.max(78, width * 0.22);
+    const clef = CLEFS[view.clef];
     return {
       width,
       height,
       space,
-      middle: height * 0.56,
+      middle: HUD_HEIGHT + (height - HUD_HEIGHT) * 0.52,
       hitX,
-      clefRight: 16 + space * 2.2,
+      clefRight: 16 + space * 2.6,
       pixelsPerBeat: (width - hitX) / view.lookahead,
+      clef,
+      bottomStep: staffStep(clef.bottom),
+      middleStep: staffStep(clef.bottom) + 4,
     };
   }
 }
 
 /** Vertical position of a diatonic step. */
 function stepY(metrics: Metrics, step: number): number {
-  return metrics.middle - (step - MIDDLE_STEP) * metrics.space / 2;
+  return metrics.middle - (step - metrics.middleStep) * metrics.space / 2;
 }
 
 /** Horizontal position of a moment in the music. */
@@ -174,7 +187,7 @@ function drawStaffLines(context: CanvasRenderingContext2D, metrics: Metrics) {
   context.lineWidth = 1;
   context.beginPath();
   for (let line = 0; line < 5; line++) {
-    const y = Math.round(stepY(metrics, BOTTOM_STEP + line * 2)) + 0.5;
+    const y = Math.round(stepY(metrics, metrics.bottomStep + line * 2)) + 0.5;
     context.moveTo(0, y);
     context.lineTo(metrics.width, y);
   }
@@ -186,8 +199,8 @@ function drawBarLines(
   metrics: Metrics,
   view: StageView,
 ) {
-  const top = stepY(metrics, BOTTOM_STEP + 8);
-  const bottom = stepY(metrics, BOTTOM_STEP);
+  const top = stepY(metrics, metrics.bottomStep + 8);
+  const bottom = stepY(metrics, metrics.bottomStep);
 
   for (let bar = 0; bar <= view.bars; bar++) {
     const x = beatX(metrics, view, bar * view.beatsPerBar);
@@ -213,59 +226,33 @@ function drawBarLines(
   }
 }
 
-/** A stylised G clef: a spiral centred on the G line, with the stem through it. */
+/** Outlines are parsed once; a `Path2D` is cheap to reuse and costly to rebuild each frame. */
+const CLEF_PATHS = new Map<string, Path2D>();
+
+function clefPath(clef: Clef): Path2D {
+  let path = CLEF_PATHS.get(clef.path);
+  if (path === undefined) {
+    path = new Path2D(clef.path);
+    CLEF_PATHS.set(clef.path, path);
+  }
+  return path;
+}
+
+/**
+ * The clef, drawn from its outline.
+ *
+ * SMuFL puts the origin on the line the clef names, so translating to that line and scaling by the
+ * staff space is the whole placement — there is no per-clef offset to get wrong.
+ */
 function drawClef(context: CanvasRenderingContext2D, metrics: Metrics) {
-  const unit = metrics.space;
-  const x = 16 + unit * 1.1;
-  const g = stepY(metrics, BOTTOM_STEP + 2);
+  const { clef, space } = metrics;
+  const scale = space / clef.unitsPerSpace;
 
   context.save();
-  context.strokeStyle = "rgba(233,236,255,0.85)";
-  context.lineWidth = unit * 0.2;
-  context.lineCap = "round";
-  context.lineJoin = "round";
-
-  context.beginPath();
-  context.moveTo(x - unit * 0.5, g - unit * 2.3);
-  context.bezierCurveTo(
-    x - unit * 0.45,
-    g - unit * 3.5,
-    x + unit * 0.62,
-    g - unit * 3.6,
-    x + unit * 0.6,
-    g - unit * 2.5,
-  );
-  context.bezierCurveTo(
-    x + unit * 0.58,
-    g - unit * 1.2,
-    x + unit * 0.18,
-    g + unit * 0.4,
-    x + unit * 0.1,
-    g + unit * 2.1,
-  );
-  context.bezierCurveTo(
-    x + unit * 0.05,
-    g + unit * 2.9,
-    x - unit * 0.8,
-    g + unit * 2.9,
-    x - unit * 0.85,
-    g + unit * 2.2,
-  );
-  context.stroke();
-
-  context.beginPath();
-  const steps = 96;
-  const turns = 2.1;
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const angle = -Math.PI * 0.4 + t * turns * Math.PI * 2;
-    const radius = unit * (1.12 - 1.0 * t);
-    const px = x + Math.cos(angle) * radius * 0.95;
-    const py = g + Math.sin(angle) * radius;
-    if (i === 0) context.moveTo(px, py);
-    else context.lineTo(px, py);
-  }
-  context.stroke();
+  context.translate(16, stepY(metrics, staffStep(clef.anchor)));
+  context.scale(scale, -scale);
+  context.fillStyle = "rgba(253,242,228,0.85)";
+  context.fill(clefPath(clef));
   context.restore();
 }
 
@@ -324,7 +311,7 @@ function drawNote(
   else context.stroke();
 
   if (shape.stem) {
-    const up = step <= MIDDLE_STEP;
+    const up = step <= metrics.middleStep;
     const stemX = up ? headX * 0.88 : -headX * 0.88;
     const stemEnd = up ? -unit * 3.2 : unit * 3.2;
     context.lineWidth = Math.max(1.4, unit * 0.12);
@@ -350,7 +337,7 @@ function drawNote(
   }
 
   if (shape.dotted) {
-    const onLine = (step - BOTTOM_STEP) % 2 === 0;
+    const onLine = (step - metrics.bottomStep) % 2 === 0;
     context.beginPath();
     context.arc(
       headX + unit * 0.55,
@@ -382,7 +369,7 @@ function drawLedgerLines(
   step: number,
   headX: number,
 ) {
-  const top = BOTTOM_STEP + 8;
+  const top = metrics.bottomStep + 8;
   const width = headX * 1.7;
   context.strokeStyle = STAFF_LINE;
   context.lineWidth = 1.4;
@@ -392,7 +379,7 @@ function drawLedgerLines(
     context.moveTo(-width, y);
     context.lineTo(width, y);
   }
-  for (let s = BOTTOM_STEP - 2; s >= step; s -= 2) {
+  for (let s = metrics.bottomStep - 2; s >= step; s -= 2) {
     const y = stepY(metrics, s) - stepY(metrics, step);
     context.moveTo(-width, y);
     context.lineTo(width, y);
@@ -449,23 +436,52 @@ function drawHud(
   metrics: Metrics,
   view: StageView,
 ) {
-  const size = Math.max(12, Math.min(18, metrics.height * 0.075));
+  // A band, so a note streaming in never passes behind the buttons above it.
+  const band = context.createLinearGradient(0, 0, 0, HUD_HEIGHT);
+  band.addColorStop(0, "rgba(26,18,13,0.92)");
+  band.addColorStop(1, "rgba(26,18,13,0)");
+  context.fillStyle = band;
+  context.fillRect(0, 0, metrics.width, HUD_HEIGHT);
 
-  context.font = `700 ${Math.round(size)}px system-ui, sans-serif`;
-  context.textBaseline = "top";
+  context.fillStyle = "rgba(253,242,228,0.1)";
+  context.fillRect(0, 0, metrics.width, 3);
+  context.fillStyle = ACCENT;
+  context.fillRect(
+    0,
+    0,
+    metrics.width * Math.min(1, Math.max(0, view.progress)),
+    3,
+  );
+
+  const size = Math.max(12, Math.min(17, metrics.height * 0.075));
+
+  context.textBaseline = "middle";
   context.textAlign = "left";
   context.fillStyle = TEXT;
-  context.fillText(`${view.score}`, 12, 8);
-  context.font = `500 ${Math.round(size * 0.68)}px system-ui, sans-serif`;
+  context.font = `700 ${Math.round(size)}px system-ui, sans-serif`;
+  const score = `${view.score}`;
+  context.fillText(score, 12, HUD_HEIGHT / 2 + 2);
+  // Measured in the face it was drawn in, before the font changes underneath it.
+  const after = 12 + context.measureText(score).width + 6;
+
+  context.font = `500 ${Math.round(size * 0.62)}px system-ui, sans-serif`;
   context.fillStyle = MUTED;
-  context.fillText("てん", 12, 8 + size * 1.1);
+  context.fillText("てん", after, HUD_HEIGHT / 2 + 3);
+  context.fillText(
+    `${view.bar} / ${view.bars}小節`,
+    after + 28,
+    HUD_HEIGHT / 2 + 3,
+  );
 
   if (view.combo >= 2) {
-    // Centred, because the corner opposite the score belongs to the on-screen buttons.
     context.textAlign = "center";
-    context.fillStyle = "#ffd66b";
+    context.fillStyle = ACCENT;
     context.font = `700 ${Math.round(size)}px system-ui, sans-serif`;
-    context.fillText(`${view.combo} コンボ`, metrics.width / 2, 8);
+    context.fillText(
+      `${view.combo} コンボ`,
+      metrics.width / 2,
+      HUD_HEIGHT / 2 + 2,
+    );
   }
 
   if (view.flash !== null) {
@@ -482,7 +498,7 @@ function drawHud(
       context.fillText(
         LABELS[view.flash.state],
         metrics.hitX,
-        stepY(metrics, BOTTOM_STEP + 8) - metrics.space * (1.2 + age),
+        stepY(metrics, metrics.bottomStep + 8) - metrics.space * (1.2 + age),
       );
       context.restore();
     }

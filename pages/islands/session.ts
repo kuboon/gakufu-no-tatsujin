@@ -244,6 +244,7 @@ export class Session {
 
     this.#cue(now);
 
+    const played = Math.max(0, beat) / (this.song.bars * this.song.beatsPerBar);
     stage.draw({
       now,
       beat,
@@ -251,8 +252,14 @@ export class Session {
       bars: this.song.bars,
       lookahead: this.lookahead,
       notes: this.#notes,
+      clef: this.song.clef,
       score: this.#score,
       combo: this.#combo,
+      bar: Math.min(
+        this.song.bars,
+        Math.max(1, Math.floor(beat / this.song.beatsPerBar) + 1),
+      ),
+      progress: Math.min(1, played),
       flash: this.#flash,
     });
 
