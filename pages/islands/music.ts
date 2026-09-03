@@ -109,12 +109,13 @@ export function midiFromName(name: string): number {
     (match[2] === "#" ? 1 : 0);
 }
 
-/** How a duration is written: an open or filled head, a stem, flags, and maybe a dot. */
+/** How a duration is written: an open or filled head, a stem, flags, and any dots. */
 export interface NoteShape {
   filled: boolean;
   stem: boolean;
   flags: number;
-  dotted: boolean;
+  /** 0, 1 or 2. Each dot adds half of what the one before it added. */
+  dots: number;
 }
 
 /** Undotted note values, in beats (a beat is a quarter note). */
@@ -131,14 +132,19 @@ const VALUES: readonly (readonly [
   [0.25, true, true, 2],
 ];
 
-/** The shape that writes a duration. Dotted values are half again as long. */
+/**
+ * The shape that writes a duration.
+ *
+ * A dot adds half of the value again, and a second dot half of what the first added — so the
+ * multipliers to try are 1, 1.5 and 1.75. Beyond two dots is not notation anyone reads at speed.
+ */
 export function noteShape(beats: number): NoteShape {
+  const DOTS = [1, 1.5, 1.75];
   for (const [value, filled, stem, flags] of VALUES) {
-    if (Math.abs(beats - value) < 1e-6) {
-      return { filled, stem, flags, dotted: false };
-    }
-    if (Math.abs(beats - value * 1.5) < 1e-6) {
-      return { filled, stem, flags, dotted: true };
+    for (const [dots, multiplier] of DOTS.entries()) {
+      if (Math.abs(beats - value * multiplier) < 1e-6) {
+        return { filled, stem, flags, dots };
+      }
     }
   }
   throw new Error(`${beats} beats is not a note value this staff can write.`);
@@ -151,46 +157,4 @@ export interface Note {
   beat: number;
   /** Length, in beats. */
   beats: number;
-}
-
-/**
- * Reads a melody written as bars of note names, e.g. `"C4 D4 E4:2 | G4 E4 D4 C4"`.
- *
- * A token is a note name with an optional `:beats` (one beat — a quarter note — by default), and
- * `|` separates bars. Every bar has to add up to the time signature, which is what turns a typo
- * into a build error rather than a melody that quietly drifts out of its bar lines.
- */
-export function readScore(
-  score: string,
-  beatsPerBar: number,
-): { notes: Note[]; bars: number } {
-  const notes: Note[] = [];
-  const bars = score.split("|").map((bar) => bar.trim()).filter((bar) =>
-    bar.length > 0
-  );
-
-  bars.forEach((bar, index) => {
-    let filled = 0;
-    for (const token of bar.split(/\s+/)) {
-      const [name, value] = token.split(":");
-      const beats = value === undefined ? 1 : Number(value);
-      if (!(beats > 0)) {
-        throw new Error(`"${token}" does not name a length in beats.`);
-      }
-      noteShape(beats);
-      notes.push({
-        midi: midiFromName(name),
-        beat: index * beatsPerBar + filled,
-        beats,
-      });
-      filled += beats;
-    }
-    if (Math.abs(filled - beatsPerBar) > 1e-6) {
-      throw new Error(
-        `Bar ${index + 1} holds ${filled} beats, not ${beatsPerBar}.`,
-      );
-    }
-  });
-
-  return { notes, bars: bars.length };
 }

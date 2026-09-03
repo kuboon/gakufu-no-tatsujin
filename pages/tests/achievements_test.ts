@@ -38,11 +38,17 @@ function keys(result: Result, before: Progress = NOTHING): string[] {
   return earned(result, before).map((entry) => entry.key);
 }
 
-Deno.test("every song has a clear achievement, and every key is declared once", () => {
+Deno.test("every key is declared once, and every clear key names a song", () => {
   const declared = ACHIEVEMENTS.map((entry) => entry.key);
   assertEquals(new Set(declared).size, declared.length);
-  for (const song of SONGS) {
-    assertEquals(declared.includes(`clear_${song.id}`), true, song.id);
+
+  // Songs earn milestones rather than one achievement each, but an achievement
+  // that names a song has to keep naming one that exists.
+  const ids = new Set(SONGS.map((song) => song.id));
+  for (const key of declared) {
+    const named = /^clear_([a-z]+)$/.exec(key)?.[1];
+    if (named === undefined || /^\d+$/.test(named)) continue;
+    assertEquals(ids.has(named), true, key);
   }
 });
 
@@ -92,16 +98,31 @@ Deno.test("a run with only good hits is not perfect", () => {
 });
 
 Deno.test("the last unplayed song completes the set", () => {
-  const before = remembered({ cleared: ["tulip", "koinu"] });
+  const last = SONGS[SONGS.length - 1];
+  const before = remembered({
+    cleared: SONGS.slice(0, -1).map((song) => song.id),
+  });
   assertEquals(
-    keys(played({ song: songById("sakura") }), before).includes("all_songs"),
+    keys(played({ song: last }), before).includes("all_songs"),
     true,
   );
-  // Still two to go: finishing one of them again does not complete anything.
+  // One still to go: finishing an earlier one again completes nothing.
   assertEquals(
-    keys(played({ song: songById("tulip") }), before).includes("all_songs"),
+    keys(played({ song: SONGS[0] }), before).includes("all_songs"),
     false,
   );
+});
+
+Deno.test("clearing songs earns the milestones as the count passes them", () => {
+  const four = remembered({ cleared: SONGS.slice(0, 4).map((s) => s.id) });
+  const won = keys(played({ song: SONGS[4] }), four);
+  assertEquals(won.includes("clear_5"), true);
+  assertEquals(won.includes("clear_10"), false);
+
+  const nine = remembered({ cleared: SONGS.slice(0, 9).map((s) => s.id) });
+  const more = keys(played({ song: SONGS[9] }), nine);
+  assertEquals(more.includes("clear_5"), true);
+  assertEquals(more.includes("clear_10"), true);
 });
 
 Deno.test("the score achievement waits for a personal best", () => {

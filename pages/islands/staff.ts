@@ -336,11 +336,12 @@ function drawNote(
     }
   }
 
-  if (shape.dotted) {
+  // The dots sit after the head, in the space its line would otherwise cross.
+  for (let dot = 0; dot < shape.dots; dot += 1) {
     const onLine = (step - metrics.bottomStep) % 2 === 0;
     context.beginPath();
     context.arc(
-      headX + unit * 0.55,
+      headX + unit * (0.55 + dot * 0.35),
       onLine ? -unit * 0.5 : 0,
       unit * 0.15,
       0,
