@@ -37,12 +37,6 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
     points: 10,
   },
   {
-    key: "clear_koinu",
-    title: "はねる 八分音符",
-    description: "「こいぬのマーチ」を最後まで弾く",
-    points: 15,
-  },
-  {
     key: "clear_sakura",
     title: "花の もとにて",
     description: "「さくら さくら」を最後まで弾く",
@@ -160,12 +154,15 @@ export function earned(result: Result, before: Progress): Earned[] {
 
   const cleared = new Set([...before.cleared, result.song.id]);
   const keys: string[] = [];
-  // Only the first three songs carry an achievement of their own; the list has
-  // grown since, and the rest count towards the milestones below instead.
+  // Only the first songs carry an achievement of their own; the list has grown
+  // since, and the rest count towards the milestones below instead.
   const own = `clear_${result.song.id}`;
   if (achievement(own) !== undefined) keys.push(own);
+  // Counted against the songs on the list today, so a song that has since been
+  // dropped cannot carry someone to a milestone.
+  const standing = SONGS.filter((song) => cleared.has(song.id)).length;
   for (const [count, key] of MILESTONES) {
-    if (cleared.size >= count) keys.push(key);
+    if (standing >= count) keys.push(key);
   }
   if (SONGS.every((song) => cleared.has(song.id))) keys.push("all_songs");
   if (result.maxCombo >= COMBO_TARGET) keys.push("combo_20");

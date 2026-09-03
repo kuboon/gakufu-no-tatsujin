@@ -206,20 +206,6 @@ export const SONGS: readonly Song[] = [
       | f f f f | f e e e8 e8 | g g f d | c1
     `,
   }),
-  song({
-    id: "koinu",
-    title: "こいぬのマーチ",
-    credit: "外国曲／久野静夫 作詞",
-    lead: "八分音符がはねる行進曲。手はいそがしい。",
-    difficulty: 3,
-    beatsPerBar: 4,
-    mml: `
-      t108 l8 o4 | e c e c e g g4 | f d d4 e c c4
-      | e c e c e g g4 | f d d4 c2
-      | e c e c e g g4 | f d d4 e c c4
-      | e c e c e g g4 | f d d4 c2
-    `,
-  }),
 ];
 
 /** Looks a song up by id, falling back to the first one. */
