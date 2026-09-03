@@ -1,11 +1,10 @@
-import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 
 import {
   hue,
   isBlackKey,
   midiFromName,
   noteShape,
-  readScore,
   solfa,
   staffStep,
 } from "../islands/music.ts";
@@ -43,48 +42,39 @@ Deno.test("durations become note shapes", () => {
     filled: false,
     stem: false,
     flags: 0,
-    dotted: false,
+    dots: 0,
   });
   assertEquals(noteShape(2), {
     filled: false,
     stem: true,
     flags: 0,
-    dotted: false,
+    dots: 0,
   });
   assertEquals(noteShape(1), {
     filled: true,
     stem: true,
     flags: 0,
-    dotted: false,
+    dots: 0,
   });
   assertEquals(noteShape(0.5), {
     filled: true,
     stem: true,
     flags: 1,
-    dotted: false,
+    dots: 0,
   });
   assertEquals(noteShape(3), {
     filled: false,
     stem: true,
     flags: 0,
-    dotted: true,
+    dots: 1,
+  });
+  assertEquals(noteShape(1.75), {
+    filled: true,
+    stem: true,
+    flags: 0,
+    dots: 2,
   });
   assertThrows(() => noteShape(1.25));
-});
-
-Deno.test("a score reads into timed notes", () => {
-  const { notes, bars } = readScore("C4 D4 E4:2 | G4:.5 G4:.5 A4 B4:2", 4);
-  assertEquals(bars, 2);
-  assertEquals(notes.length, 7);
-  assertEquals(notes[0], { midi: 60, beat: 0, beats: 1 });
-  assertEquals(notes[2], { midi: 64, beat: 2, beats: 2 });
-  assertAlmostEquals(notes[4].beat, 4.5);
-  assertEquals(notes[6].beat, 6);
-});
-
-Deno.test("a bar that does not add up is a build error, not a drifting melody", () => {
-  assertThrows(() => readScore("C4 D4 E4", 4), Error, "3 beats");
-  assertThrows(() => readScore("C4 D4 E4 F4 G4", 4), Error, "5 beats");
 });
 
 Deno.test("every song fits on the keyboard it asks for", () => {

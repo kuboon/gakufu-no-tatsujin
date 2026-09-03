@@ -49,10 +49,22 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
     points: 15,
   },
   {
+    key: "clear_5",
+    title: "5曲 まわった",
+    description: "5曲を最後まで弾く",
+    points: 20,
+  },
+  {
+    key: "clear_10",
+    title: "10曲 まわった",
+    description: "10曲を最後まで弾く",
+    points: 30,
+  },
+  {
     key: "all_songs",
     title: "全曲 制覇",
-    description: "3曲すべてを最後まで弾く",
-    points: 30,
+    description: "収録曲すべてを最後まで弾く",
+    points: 40,
   },
   {
     key: "combo_20",
@@ -123,6 +135,12 @@ export const NO_PROGRESS: Progress = {
 /** How many combos in a row the combo achievement asks for. */
 const COMBO_TARGET = 20;
 
+/** How many songs cleared earns which milestone, low to high. */
+const MILESTONES: readonly (readonly [count: number, key: string])[] = [
+  [5, "clear_5"],
+  [10, "clear_10"],
+];
+
 const STORAGE_KEY = "gakufu:progress";
 
 /**
@@ -141,7 +159,14 @@ export function earned(result: Result, before: Progress): Earned[] {
   if (result.usedAuto) return [{ key: "listen_through" }];
 
   const cleared = new Set([...before.cleared, result.song.id]);
-  const keys = [`clear_${result.song.id}`];
+  const keys: string[] = [];
+  // Only the first three songs carry an achievement of their own; the list has
+  // grown since, and the rest count towards the milestones below instead.
+  const own = `clear_${result.song.id}`;
+  if (achievement(own) !== undefined) keys.push(own);
+  for (const [count, key] of MILESTONES) {
+    if (cleared.size >= count) keys.push(key);
+  }
   if (SONGS.every((song) => cleared.has(song.id))) keys.push("all_songs");
   if (result.maxCombo >= COMBO_TARGET) keys.push("combo_20");
   if (result.miss === 0) keys.push("no_miss");
