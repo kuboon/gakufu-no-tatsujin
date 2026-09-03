@@ -10,6 +10,7 @@
  */
 
 import type { ClefName } from "./clefs.ts";
+import { keyRange } from "./keyboard.ts";
 import { readMml } from "./mml.ts";
 import type { Note } from "./music.ts";
 
@@ -49,15 +50,15 @@ function song(spec: SongSpec): Song {
   const { mml, clef = "treble", ...rest } = spec;
   const { notes, bars, bpm } = readMml(mml, spec.beatsPerBar);
   const pitches = notes.map((note) => note.midi);
-  return {
-    ...rest,
-    clef,
-    bpm,
-    notes,
-    bars,
-    lowest: Math.min(...pitches),
-    highest: Math.max(...pitches),
-  };
+  const lowest = Math.min(...pitches);
+  const highest = Math.max(...pitches);
+
+  // The keyboard is one fixed width for every song, so a song too wide for it
+  // has to be caught here — at import, which means at build — rather than
+  // narrowing the keys for everyone else.
+  keyRange(lowest, highest);
+
+  return { ...rest, clef, bpm, notes, bars, lowest, highest };
 }
 
 export const SONGS: readonly Song[] = [

@@ -1,15 +1,57 @@
-import { assertAlmostEquals, assertEquals } from "@std/assert";
+import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
 
-import { keyboardLayout, keyRange, typingMap } from "../islands/keyboard.ts";
-import { midiFromName } from "../islands/music.ts";
+import {
+  keyboardLayout,
+  keyRange,
+  typingMap,
+  WHITE_KEYS,
+} from "../islands/keyboard.ts";
+import { isBlackKey, midiFromName } from "../islands/music.ts";
+import { SONGS } from "../islands/songs.ts";
 
-Deno.test("a range widens to whole white keys", () => {
+Deno.test("a range becomes the keyboard's fixed span, anchored at its bottom", () => {
+  // C4 up to A4 needs six white keys and gets nine, the spare three above it.
   assertEquals(keyRange(midiFromName("C4"), midiFromName("A4")), {
-    from: 60,
-    to: 69,
+    from: midiFromName("C4"),
+    to: midiFromName("D5"),
   });
-  // C#4 up to A#4 reaches out to the white keys either side.
-  assertEquals(keyRange(61, 70), { from: 60, to: 71 });
+  // A black note at either end still starts the keyboard on a whole white key.
+  assertEquals(keyRange(61, 70), {
+    from: midiFromName("C4"),
+    to: midiFromName("D5"),
+  });
+  // Shifted up an octave: the same nine keys, a different set of pitches.
+  assertEquals(keyRange(midiFromName("C5"), midiFromName("A5")), {
+    from: midiFromName("C5"),
+    to: midiFromName("D6"),
+  });
+});
+
+Deno.test("every song is played on the same number of keys", () => {
+  for (const song of SONGS) {
+    const { from, to } = keyRange(song.lowest, song.highest);
+    const keys = keyboardLayout(from, to);
+    assertEquals(
+      keys.filter((key) => !key.black).length,
+      WHITE_KEYS,
+      song.title,
+    );
+    // Anchored at the bottom, and wide enough for the whole melody.
+    assertEquals(from, song.lowest - (isBlackKey(song.lowest) ? 1 : 0));
+    assertEquals(to >= song.highest, true, song.title);
+  }
+});
+
+Deno.test("a song wider than the keyboard fails the build", () => {
+  // Two octaves is fifteen white keys, and the keyboard shows nine.
+  assertThrows(
+    () => keyRange(midiFromName("C4"), midiFromName("C6")),
+    Error,
+    `the keyboard shows ${WHITE_KEYS}`,
+  );
+  // One white key too many is refused just the same.
+  const tenth = keyRange(60, 60).to + 2;
+  assertThrows(() => keyRange(60, tenth), Error, "white keys");
 });
 
 Deno.test("white keys tile the width and black keys straddle the seams", () => {
