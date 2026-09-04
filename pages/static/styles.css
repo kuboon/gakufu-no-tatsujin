@@ -875,17 +875,25 @@ body.bare {
   background: rgba(183, 217, 74, 0.1);
 }
 
+/* Earned, but the hub has not been told yet. The claim link below records it. */
+
+.award__chip.is-waiting {
+  border-color: var(--line);
+  color: var(--ink-soft);
+  background: rgba(253, 242, 228, 0.05);
+}
+
+.awards__claim {
+  align-self: flex-start;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .award__title {
   font-weight: 700;
 }
 
 .award__points {
   opacity: 0.75;
-}
-
-.award__claim {
-  padding-left: 0.4rem;
-  border-left: 1px solid currentColor;
-  opacity: 0.85;
-  text-decoration: underline;
 }
