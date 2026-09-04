@@ -20,16 +20,68 @@ export interface KeyCap {
 /** How wide a black key is, relative to a white one. */
 const BLACK_WIDTH = 0.62;
 
-/** Widens a pitch range to the white keys that enclose it, so the keyboard starts and ends whole. */
+/**
+ * How many white keys the keyboard shows — the same number for every song.
+ *
+ * Fixed on purpose. A keyboard sized to each song's range changed width from song to song, so a
+ * finger that had learned where ミ sits had to find it again on the next song. Holding the count
+ * still keeps the keys the same size and the same distance apart; all that moves between songs is
+ * which pitches they carry.
+ *
+ * The number is the widest song on the list today — さくら さくら, シ3 から ド5 で9白鍵. Raising it
+ * is a deliberate edit: a song that needs more keys fails the build rather than quietly shrinking
+ * the keys for every other song.
+ */
+export const WHITE_KEYS = 9;
+
+/**
+ * The stretch of keyboard a song is played on: {@link WHITE_KEYS} white keys from the white key at
+ * or below its lowest note.
+ *
+ * Anchored at the bottom rather than centred, so the low end of a melody starts at the left edge
+ * the way it would on a piano, and the spare keys sit above it.
+ *
+ * @throws When the range needs more white keys than the keyboard shows
+ */
 export function keyRange(
   lowest: number,
   highest: number,
 ): { from: number; to: number } {
-  let from = lowest;
-  let to = highest;
-  while (isBlackKey(from)) from--;
-  while (isBlackKey(to)) to++;
+  const from = whiteAtOrBelow(lowest);
+  const needed = whiteKeys(from, whiteAtOrAbove(highest));
+  if (needed > WHITE_KEYS) {
+    throw new Error(
+      `A song from ${lowest} to ${highest} needs ${needed} white keys; the keyboard shows ${WHITE_KEYS}.`,
+    );
+  }
+
+  // The WHITE_KEYS-th white key at or above `from`.
+  let to = from;
+  for (let counted = 1; counted < WHITE_KEYS; to++) {
+    if (!isBlackKey(to + 1)) counted++;
+  }
   return { from, to };
+}
+
+function whiteAtOrBelow(midi: number): number {
+  let at = midi;
+  while (isBlackKey(at)) at--;
+  return at;
+}
+
+function whiteAtOrAbove(midi: number): number {
+  let at = midi;
+  while (isBlackKey(at)) at++;
+  return at;
+}
+
+/** How many white keys there are from `from` to `to` inclusive. */
+function whiteKeys(from: number, to: number): number {
+  let count = 0;
+  for (let midi = from; midi <= to; midi++) {
+    if (!isBlackKey(midi)) count++;
+  }
+  return count;
 }
 
 /**

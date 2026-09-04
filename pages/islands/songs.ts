@@ -10,6 +10,7 @@
  */
 
 import type { ClefName } from "./clefs.ts";
+import { keyRange } from "./keyboard.ts";
 import { readMml } from "./mml.ts";
 import type { Note } from "./music.ts";
 
@@ -49,15 +50,15 @@ function song(spec: SongSpec): Song {
   const { mml, clef = "treble", ...rest } = spec;
   const { notes, bars, bpm } = readMml(mml, spec.beatsPerBar);
   const pitches = notes.map((note) => note.midi);
-  return {
-    ...rest,
-    clef,
-    bpm,
-    notes,
-    bars,
-    lowest: Math.min(...pitches),
-    highest: Math.max(...pitches),
-  };
+  const lowest = Math.min(...pitches);
+  const highest = Math.max(...pitches);
+
+  // The keyboard is one fixed width for every song, so a song too wide for it
+  // has to be caught here — at import, which means at build — rather than
+  // narrowing the keys for everyone else.
+  keyRange(lowest, highest);
+
+  return { ...rest, clef, bpm, notes, bars, lowest, highest };
 }
 
 export const SONGS: readonly Song[] = [
@@ -122,6 +123,18 @@ export const SONGS: readonly Song[] = [
       [ c c g g | a a g2 | f f e e | d d c2 ]1
       [ g g f f | e e d2 ]2
       c c g g | a a g2 | f f e e | d d c2
+    `,
+  }),
+  song({
+    id: "london",
+    title: "ロンドン橋",
+    credit: "イングランド民謡（London Bridge Is Falling Down）",
+    lead: "2拍子。小節が短いので、小節線がすぐ次に来る。",
+    difficulty: 2,
+    beatsPerBar: 2,
+    mml: `
+      t120 l4 o4 | g8. a16 g8 f8 | e8 f8 g4 | d8 e8 f4 | e8 f8 g4
+      | g8. a16 g8 f8 | e8 f8 g4 | d4 g4 | e8 c4.
     `,
   }),
   song({
