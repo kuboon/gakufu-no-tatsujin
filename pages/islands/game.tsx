@@ -20,7 +20,7 @@ import {
   recordProgress,
 } from "./achievements.ts";
 import { Tones } from "./audio.ts";
-import { GAME_PAGE, report, type Unlocked } from "./gamecenter.ts";
+import { GAME_PAGE, report, type Reported } from "./gamecenter.ts";
 import {
   keyboardLayout,
   type KeyCap,
@@ -53,7 +53,7 @@ export const Game = island(
     let result: Result | null = null;
     let session: Session | null = null;
     let auto = false;
-    let unlocked: Unlocked[] | null = null;
+    let reported: Reported | null = null;
     // Whether the run on screen beat this device's record for that song.
     let beatBest = false;
     // What this device remembers, once there is a browser to ask. The page is
@@ -92,7 +92,7 @@ export const Game = island(
       session = new Session({ song, tones, onFinish: finish });
       session.auto = auto;
       result = null;
-      unlocked = null;
+      reported = null;
       phase = "play";
       void handle.update();
     }
@@ -106,7 +106,7 @@ export const Game = island(
       result = finished;
       session = null;
       phase = "result";
-      unlocked = null;
+      reported = null;
       void handle.update();
       void award(finished, before);
     }
@@ -122,10 +122,10 @@ export const Game = island(
       progress = recordProgress(finished, before, won);
       if (won.length === 0) return;
 
-      const results = await report(won);
+      const answer = await report(won);
       // A slow answer must not land on a screen that has moved on.
       if (result !== finished) return;
-      unlocked = results;
+      reported = answer;
       void handle.update();
     }
 
@@ -386,48 +386,52 @@ export const Game = island(
     /**
      * What the play-through earned.
      *
-     * An achievement the hub could not take on its own comes back with a claim
-     * URL, and that URL is the chip itself: a link the player chose to follow
-     * survives a popup blocker, and shows them what is about to be recorded.
+     * A chip per achievement, saying whether the hub has it. Whatever it could
+     * not take is waiting in the SDK's queue, and one link at the end records
+     * all of it — including anything left over from an earlier play. The link
+     * is a link the player chooses to follow, never a window this page opens.
      */
     function awards(): RemixNode {
-      if (unlocked === null || unlocked.length === 0) return null;
+      if (reported === null || reported.results.length === 0) return null;
+      const answer = reported;
 
       return (
         <div class="awards">
           <span class="awards__label">もらった実績</span>
           <ul class="awards__list">
-            {unlocked.map((entry) => {
+            {answer.results.map((entry) => {
               const won = achievement(entry.key);
               if (won === undefined) return null;
-              const label = (
-                <>
-                  <span class="award__title">{won.title}</span>
-                  {won.points > 0
-                    ? <span class="award__points">+{won.points}</span>
-                    : null}
-                </>
-              );
 
               return (
-                <li key={entry.key} class="award">
-                  {entry.recorded
-                    ? <span class="award__chip is-recorded">{label}</span>
-                    : (
-                      <a
-                        class="award__chip"
-                        href={entry.claimUrl}
-                        target="_blank"
-                        rel="noopener"
-                      >
-                        {label}
-                        <span class="award__claim">記録する</span>
-                      </a>
-                    )}
+                <li key={entry.key}>
+                  <span
+                    class={entry.recorded
+                      ? "award__chip is-recorded"
+                      : "award__chip is-waiting"}
+                  >
+                    <span class="award__title">{won.title}</span>
+                    {won.points > 0
+                      ? <span class="award__points">+{won.points}</span>
+                      : null}
+                  </span>
                 </li>
               );
             })}
           </ul>
+          {answer.claimUrl !== null
+            ? (
+              <a
+                class="award__chip awards__claim"
+                href={answer.claimUrl}
+                target="_blank"
+                rel="noopener"
+              >
+                実績を記録する
+                <span class="award__points">{answer.pending}件</span>
+              </a>
+            )
+            : null}
         </div>
       );
     }
