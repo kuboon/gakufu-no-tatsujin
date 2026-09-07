@@ -13,17 +13,22 @@ import { renderMarkdown } from "../lib/markdown.ts";
 import { Link } from "../lib/link.tsx";
 import { renderPage } from "../layout.tsx";
 
-export function markdown(context: { base: string }): FileTransform {
+/** The URL path a source file is served at, relative to the mount point. */
+function urlPath(relativePath: string): string {
+  const withoutExtension = relativePath.replace(/\.md$/, "").replace(
+    /(^|\/)index$/,
+    "",
+  );
+  return `/${withoutExtension}`.replace(/\/$/, "") || "/";
+}
+
+export function markdown(
+  context: { base: string; siteUrl: string },
+): FileTransform {
   return {
     match: (relativePath) => relativePath.endsWith(".md"),
 
-    path: (relativePath) => {
-      const withoutExtension = relativePath.replace(/\.md$/, "").replace(
-        /(^|\/)index$/,
-        "",
-      );
-      return `/${withoutExtension}`.replace(/\/$/, "") || "/";
-    },
+    path: urlPath,
 
     async render(file) {
       const slug = file.path.replace(/\.md$/, "").split("/").pop() ?? file.path;
@@ -35,6 +40,8 @@ export function markdown(context: { base: string }): FileTransform {
           title: `${article.title} — remix-ssg`,
           description: article.summary,
           base: context.base,
+          siteUrl: context.siteUrl,
+          path: urlPath(file.path),
           islandUrls: {},
           children: (
             <article class="post">
