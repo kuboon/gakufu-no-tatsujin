@@ -196,7 +196,13 @@ MML は拍子を持たないので、1小節の拍数は `beatsPerBar` に書き
 | `islands/keyboard.ts` | 鍵の範囲と配置、パソコンのキーとの対応 |
 | `islands/session.ts` | 時計、判定、フレームループ |
 | `islands/audio.ts` | 簡易ピアノの音と、ゲームの時計 |
+| `tools/og.ts` | 共有画像（`static/og.png`）の元を、上のモデルから組み立てる |
 | `islands/achievements.ts` | 実績の一覧、達成判定、この端末の記録 |
+
+リンクを共有したときのカード画像は `pages/static/og.png` です。
+音と色の対応も五線上の位置も鍵盤の幅も `islands/` が決めているので、画像もそこから組み立てます。
+`deno run --allow-read tools/og.ts` が HTML を吐くので、1200×630 で開いて撮ったものを置き換えてください。
+色を変えたときに画像だけ古いまま残ることがありません。
 
 サイトの土台は [Remix v3](https://remix.run) と
 [`@kuboon/remix-ssg`](https://jsr.io/@kuboon/remix-ssg) による静的サイト生成です。

@@ -26,19 +26,26 @@ export interface PageModule {
   bare?: boolean;
 }
 
+/** The URL path a source file is served at, relative to the mount point. */
+function urlPath(relativePath: string): string {
+  const withoutExtension = relativePath.replace(/\.tsx$/, "").replace(
+    /(^|\/)index$/,
+    "",
+  );
+  return `/${withoutExtension}`.replace(/\/$/, "") || "/";
+}
+
 export function page(
-  context: { base: string; islandUrls: Record<string, string> },
+  context: {
+    base: string;
+    siteUrl: string;
+    islandUrls: Record<string, string>;
+  },
 ): FileTransform {
   return {
     match: (relativePath) => relativePath.endsWith(".tsx"),
 
-    path: (relativePath) => {
-      const withoutExtension = relativePath.replace(/\.tsx$/, "").replace(
-        /(^|\/)index$/,
-        "",
-      );
-      return `/${withoutExtension}`.replace(/\/$/, "") || "/";
-    },
+    path: urlPath,
 
     async render(file) {
       // Cached for the life of the process; `deno serve --watch` restarts when a page changes.
@@ -60,6 +67,8 @@ export function page(
           title: module.title ?? file.path,
           description: module.description,
           base: context.base,
+          siteUrl: context.siteUrl,
+          path: urlPath(file.path),
           lang: module.lang,
           head: module.head,
           bare: module.bare,

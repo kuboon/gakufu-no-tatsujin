@@ -18,7 +18,7 @@ import {
 } from "@kuboon/remix-ssg/site";
 import type { FileServerBehavior } from "@kuboon/remix-ssg/site";
 
-import { base } from "./lib/base.ts";
+import { base, siteUrl } from "./lib/base.ts";
 import { markdown } from "./transforms/markdown.tsx";
 import { page } from "./transforms/page.tsx";
 
@@ -30,9 +30,15 @@ export { base };
  *
  * Everything else is reached by following links, so the blog index listing its articles is what
  * makes them part of the site. `/about` is named here because the home page is the game and the
- * game fills the viewport: it carries no site chrome to link out from.
+ * game fills the viewport: it carries no site chrome to link out from. The sharing image is named
+ * for the same reason in reverse: every page points at it, but from a `<meta>` tag, and a crawler
+ * follows links rather than metadata.
  */
-export const entryPoints: readonly string[] = ["/", "/about"];
+export const entryPoints: readonly string[] = [
+  "/",
+  "/about",
+  "/static/og.png",
+];
 
 /** Where this deploys. The build writes the file this rule would serve. */
 export const fileServer: FileServerBehavior = githubPages();
@@ -51,8 +57,8 @@ export default serveAsHost(
       rootDir: "pages",
       basePath: base,
       transforms: [
-        markdown({ base }),
-        page({ base, islandUrls: islands.urls }),
+        markdown({ base, siteUrl }),
+        page({ base, siteUrl, islandUrls: islands.urls }),
       ],
     }),
     await createFileTree({
