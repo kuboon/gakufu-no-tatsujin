@@ -134,12 +134,9 @@ console.log(`<!doctype html><meta charset="utf-8"><style>
 </style>
 <div style="position:relative;width:${W}px;height:${H}px">
   <svg width="${W}" height="${KEYS_TOP}" style="position:absolute;top:0;left:0">${svg}</svg>
-  <div style="position:absolute;top:52px;left:56px;right:56px;display:flex;align-items:flex-end;justify-content:space-between;gap:32px">
-    <div>
-      <div style="font-size:62px;font-weight:800;letter-spacing:0.1em;line-height:1.1">楽譜の達人</div>
-      <div style="margin-top:14px;font-size:23px;line-height:1.45;color:rgba(253,242,228,0.72)">音の高さは色。流れてくる音符と同じ色の鍵をおす。</div>
-    </div>
-    <div style="display:flex;gap:7px;padding-bottom:8px">${hues}</div>
+  <div style="position:absolute;top:46px;left:56px;right:56px;display:flex;align-items:center;justify-content:space-between;gap:32px">
+    <div style="font-size:62px;font-weight:800;letter-spacing:0.1em;line-height:1.1">楽譜の達人</div>
+    <div style="display:flex;gap:7px">${hues}</div>
   </div>
   <div style="position:absolute;top:${KEYS_TOP}px;left:0;width:${W}px;height:${
   H - KEYS_TOP
