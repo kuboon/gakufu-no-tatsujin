@@ -27,6 +27,7 @@ import {
   keyRange,
   typingMap,
 } from "./keyboard.ts";
+import { listenMidi, midiSupported } from "./midi.ts";
 import { glowColor, keyColor, noteColor, solfa } from "./music.ts";
 import { type Song, SONGS } from "./songs.ts";
 import type { Result } from "./session.ts";
@@ -60,6 +61,18 @@ export const Game = island(
     // built ahead of time, so the first render has to be the blank one every
     // visitor's HTML carries; the real record arrives a beat later.
     let progress: Progress | null = null;
+    // How far the player has got with a MIDI keyboard, if they asked for one.
+    // "unknown" until there is a browser to ask, for the same reason the record
+    // above is: the page is built ahead of time, and whether Web MIDI exists is
+    // not something the build can answer.
+    let midi:
+      | "unknown"
+      | "unsupported"
+      | "off"
+      | "asking"
+      | "on"
+      | "refused" = "unknown";
+    let instruments: readonly string[] = [];
 
     // Held sideways is the only way to play, so a portrait phone stops the clock rather than
     // running the song out behind the notice.
@@ -72,10 +85,44 @@ export const Game = island(
       );
     }
 
-    /** Reads the stored record, the first time this runs in a browser. */
-    function loadProgress(): void {
+    /**
+     * Reads what only a browser can answer, the first time this runs in one.
+     *
+     * The stored record, and whether this browser has Web MIDI at all. Both
+     * have to wait for the page to be live: rendering either on the first pass
+     * would disagree with the HTML the build wrote, which is a hydration
+     * mismatch rather than a difference of opinion.
+     */
+    function readDevice(): void {
       if (progress !== null) return;
       progress = readProgress();
+      midi = midiSupported() ? "off" : "unsupported";
+      void handle.update();
+    }
+
+    /**
+     * Connects a MIDI keyboard, on the press of the button that offers it.
+     *
+     * Asked for rather than assumed: the browser answers with a permission
+     * prompt, and one that appears unbidden on a game's front page is a good
+     * way to be refused for good. The notes go to whichever song is playing
+     * when they arrive, so this outlives any one play-through.
+     */
+    async function connectMidi(): Promise<void> {
+      if (midi === "asking" || midi === "on") return;
+      midi = "asking";
+      void handle.update();
+
+      const granted = await listenMidi({
+        press: (note) => session?.press(note),
+        release: (note) => session?.release(note),
+        devices: (names) => {
+          instruments = names;
+          void handle.update();
+        },
+      }, handle.signal);
+
+      midi = granted ? "on" : "refused";
       void handle.update();
     }
 
@@ -199,6 +246,41 @@ export const Game = island(
       );
     }
 
+    /**
+     * The MIDI keyboard's one control, and everything it has to say.
+     *
+     * Absent where the browser has no Web MIDI — Safari never shipped it —
+     * because a button that cannot work is worse than no button.
+     */
+    function midiButton(): RemixNode {
+      if (midi === "unknown" || midi === "unsupported") return null;
+
+      const label = midi === "on"
+        ? (instruments.length > 0 ? instruments[0] : "つないでください")
+        : midi === "asking"
+        ? "きいています…"
+        : midi === "refused"
+        ? "ゆるされませんでした"
+        : "MIDIキーボード";
+
+      return (
+        <button
+          type="button"
+          class={midi === "on" && instruments.length > 0
+            ? "toggle is-on"
+            : "toggle"}
+          aria-pressed={midi === "on" ? "true" : "false"}
+          disabled={midi === "asking" || midi === "on"}
+          title={midi === "on" && instruments.length > 1
+            ? instruments.join("、")
+            : undefined}
+          mix={[on("click", () => void connectMidi())]}
+        >
+          {label}
+        </button>
+      );
+    }
+
     function fullscreenButton(): RemixNode {
       return (
         <button
@@ -247,7 +329,7 @@ export const Game = island(
           </header>
 
           <div class="select__body">
-            <ul class="songs" mix={[ref(loadProgress)]}>
+            <ul class="songs" mix={[ref(readDevice)]}>
               {SONGS.map((choice) => (
                 <li key={choice.id}>
                   <button
@@ -288,6 +370,7 @@ export const Game = island(
           <footer class="select__foot">
             <div class="select__side">
               {autoButton()}
+              {midiButton()}
               <span class="select__hint">
                 スマホは横向き・パソコンは A〜L キーでも弾けます
               </span>
