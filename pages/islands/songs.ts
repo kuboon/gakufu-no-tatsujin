@@ -230,6 +230,10 @@ export const SONGS: readonly Song[] = [
     // Two parts, which is what makes the thirds and sixths of the right hand. The 20th and 24th
     // bars are the one place the right hand rests for a whole bar; the left hand's answer is
     // written into the upper part there, so the game does not stop for a bar and a third.
+    //
+    // The printed score writes the opening eight bars out a third time after this, before the
+    // ending. Played straight through that reads as the song starting over, so it is left out and
+    // the ending follows the 24th bar.
     mml: `
       t180 l4 o4 | r2. e-8 d-8
       | [ r4 g-4 g-4 e-8 d-8 |]2 r4 g-4 r4 g-4
@@ -238,9 +242,7 @@ export const SONGS: readonly Song[] = [
       | [ r4 f4 f4 e-8 d-8 |]3 r4 f4 r4 f4
       | r4 g-4 g-4 e-8 d-8 | [ r4 g-4 r4 g-4 |]2 o3 g-4 f4 g-4 g4
       | o4 r4 f4 f4 e-8 d-8 | [ r4 f4 r4 f4 |]2 o3 a-4 g4 a-4 a4
-      | o4 [ r4 g-4 g-4 e-8 d-8 |]3 r4 g-4 r4 g-4
-      | [ r4 f4 f4 e-8 d-8 |]3 r4 f4 r4 f4
-      | r4 g-4 g-4 r4 | g-4 d-8 d-8 d4 d-4 | r4 f4 g-4 r4 |
+      | o4 r4 g-4 g-4 r4 | g-4 d-8 d-8 d4 d-4 | r4 f4 g-4 r4 |
       ,
       l4 o3 | r1
       | [ r4 b-4 b-4 r4 |]2 r4 b-4 r4 b-4
@@ -249,8 +251,6 @@ export const SONGS: readonly Song[] = [
       | o4 [ r4 c-4 c-4 r4 |]3 r4 c-4 r4 c-4
       | o3 r4 b-4 b-4 r4 | [ r4 b-4 r4 b-4 |]2 r1
       | o4 r4 c-4 c-4 r4 | [ r4 c-4 r4 c-4 |]2 r1
-      | o3 [ r4 b-4 b-4 r4 |]3 r4 b-4 r4 b-4
-      | o4 [ r4 c-4 c-4 r4 |]3 r4 c-4 r4 c-4
       | o3 r4 b-4 b-4 r4 | b-4 r2. | r4 o4 c-4 o3 b-4 r4 |
     `,
   }),
