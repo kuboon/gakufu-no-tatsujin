@@ -28,9 +28,9 @@ const BLACK_WIDTH = 0.62;
  * still keeps the keys the same size and the same distance apart; all that moves between songs is
  * which pitches they carry.
  *
- * The number is the widest song on the list today — さくら さくら, シ3 から ド5 で9白鍵. Raising it
- * is a deliberate edit: a song that needs more keys fails the build rather than quietly shrinking
- * the keys for every other song.
+ * The number is the widest song on the list today. Two songs fill it exactly: さくら さくら,
+ * シ3 から ド5, and ねこふんじゃった, ファ3 から ファ♯4. Raising it is a deliberate edit: a song
+ * that needs more keys fails the build rather than quietly shrinking the keys for every other song.
  */
 export const WHITE_KEYS = 9;
 

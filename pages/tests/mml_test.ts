@@ -1,4 +1,4 @@
-import { assertAlmostEquals, assertEquals, assertThrows } from "@std/assert";
+import { assertEquals, assertThrows } from "@std/assert";
 
 import { readMml } from "../islands/mml.ts";
 import { SONGS } from "../islands/songs.ts";
@@ -104,18 +104,51 @@ Deno.test("notation the reader does not know is refused", () => {
   assertThrows(() => readMml("o4 l4 z", 4), Error, "not part of this notation");
   assertThrows(() => readMml("o4 l4 [ c", 4), Error, "never closed");
   assertThrows(() => readMml("o4 l4 c ]", 4), Error, "never opened");
-  assertThrows(() => readMml("o4 l4 c , o4 l4 e", 4), Error, "parts");
+});
+
+Deno.test("parts separated by a comma play at once", () => {
+  // A chord: two parts, both a bar long, merged into one list in time order.
+  assertEquals(played("o4 l4 c e g r , o3 l4 c r r r", 4), [
+    "48@0+1",
+    "60@0+1",
+    "64@1+1",
+    "67@2+1",
+  ]);
+});
+
+Deno.test("either part may set the tempo, and they have to agree", () => {
+  assertEquals(readMml("t90 l4 o4 c , l4 o3 c", 1).bpm, 90);
+  assertEquals(readMml("l4 o4 c , t90 l4 o3 c", 1).bpm, 90);
+  assertEquals(readMml("t90 l4 o4 c , t90 l4 o3 c", 1).bpm, 90);
+  assertThrows(
+    () => readMml("t90 l4 o4 c , t120 l4 o3 c", 1),
+    Error,
+    "one tempo",
+  );
+});
+
+Deno.test("parts have to be the same length, and share the bar lines", () => {
+  assertThrows(
+    () => readMml("l4 o4 | c c | c c , l4 o3 | c c | c", 2),
+    Error,
+    "as long as the song",
+  );
+  assertThrows(
+    () => readMml("l4 o4 | c c | c c , l4 o3 | c | c c c", 2),
+    Error,
+    "bar line falls",
+  );
 });
 
 Deno.test("every song fills whole bars and lands on its bar lines", () => {
   for (const song of SONGS) {
-    const last = song.notes[song.notes.length - 1];
-    assertAlmostEquals(
-      last.beat + last.beats,
-      song.bars * song.beatsPerBar,
-      1e-9,
-      song.id,
+    // The song may end on a rest, so the last note only has to fall in the last bar.
+    const end = Math.max(
+      ...song.notes.map((note) => note.beat + note.beats),
     );
+    const finish = song.bars * song.beatsPerBar;
+    assertEquals(end <= finish + 1e-9, true, song.id);
+    assertEquals(end > finish - song.beatsPerBar, true, song.id);
     assertEquals(song.bpm > 0, true, song.id);
   }
 });

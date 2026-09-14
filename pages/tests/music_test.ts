@@ -94,10 +94,5 @@ Deno.test("every song fits on the keyboard it asks for", () => {
     }
 
     assertEquals(from, song.lowest - (isBlackKey(song.lowest) ? 1 : 0));
-    assertEquals(
-      song.notes[song.notes.length - 1].beat +
-        song.notes[song.notes.length - 1].beats,
-      song.bars * song.beatsPerBar,
-    );
   }
 });

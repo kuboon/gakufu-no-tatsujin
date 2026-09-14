@@ -48,6 +48,9 @@ export interface StageView {
   /** How far through the song, 0 to 1. */
   progress: number;
   flash: { state: NoteState; at: number } | null;
+  /** The song's lowest and highest notes, so the staff can sit where they all fit. */
+  lowest: number;
+  highest: number;
 }
 
 const BACKGROUND_TOP = "#2b1d15";
@@ -145,19 +148,50 @@ export class Stage {
     const space = Math.min((height - HUD_HEIGHT) / 8.5, 34);
     const hitX = Math.max(78, width * 0.22);
     const clef = CLEFS[view.clef];
+    const bottomStep = staffStep(clef.bottom);
+    const middleStep = bottomStep + 4;
     return {
       width,
       height,
       space,
-      middle: HUD_HEIGHT + (height - HUD_HEIGHT) * 0.52,
+      middle: middleOf(view, height, space, bottomStep, middleStep),
       hitX,
       clefRight: 16 + space * 2.6,
       pixelsPerBeat: (width - hitX) / view.lookahead,
       clef,
-      bottomStep: staffStep(clef.bottom),
-      middleStep: staffStep(clef.bottom) + 4,
+      bottomStep,
+      middleStep,
     };
   }
+}
+
+/**
+ * Where the middle line goes.
+ *
+ * A little above centre, so the staff sits where the eye expects it — but a song that runs on
+ * ledger lines needs the room on that side, and would otherwise have its heads cut off by the edge
+ * of the canvas. So the placement slides by however much is hanging over, and only by that much: a
+ * song that already fits does not move at all.
+ */
+function middleOf(
+  view: StageView,
+  height: number,
+  space: number,
+  bottomStep: number,
+  middleStep: number,
+): number {
+  const middle = HUD_HEIGHT + (height - HUD_HEIGHT) * 0.52;
+  const y = (step: number) => middle - (step - middleStep) * space / 2;
+  // A head is a space tall, and a ledger line reaches past it; leave room for both.
+  const margin = space * 0.75;
+  const top = y(Math.max(bottomStep + 8, staffStep(view.highest))) - margin;
+  const bottom = y(Math.min(bottomStep, staffStep(view.lowest))) + margin;
+
+  if (bottom - top > height - HUD_HEIGHT) {
+    // Taller than the canvas: centre it and lose as little as possible at each end.
+    return middle + (HUD_HEIGHT + height) / 2 - (top + bottom) / 2;
+  }
+  return middle + Math.max(0, HUD_HEIGHT - top) - Math.max(0, bottom - height);
 }
 
 /** Vertical position of a diatonic step. */

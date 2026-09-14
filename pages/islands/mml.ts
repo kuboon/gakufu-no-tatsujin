@@ -6,6 +6,11 @@
  * the only place that knows that notation; everything downstream sees the same {@link Note} list
  * the rest of the game already speaks.
  *
+ * A melody may be written in several parts, separated by `,`. The parts all start at the top of the
+ * song and run together, which is how a chord is written: one voice per line of the harmony. They
+ * are merged into the one time-ordered note list the game plays, because a chord is not a special
+ * case downstream — two notes that fall on the same beat are two notes to hit.
+ *
  * What the dialect carries and the game cannot use is dropped on purpose. Volume, gate time and
  * waveform describe a synthesizer voice, and the game brings its own; a bar line is a reading aid
  * that playback ignores. The reader still parses all of it, so a song can be pasted in unchanged.
@@ -52,39 +57,68 @@ export interface Melody {
  * @returns The notes, in beats from the first downbeat of bar 1
  */
 export function readMml(mml: string, beatsPerBar: number): Melody {
-  const parts = expandRepeats(mml).split(",");
-  if (parts.length > 1) {
-    throw new Error(
-      `This melody has ${parts.length} parts; the game plays one.`,
-    );
-  }
+  const parts = expandRepeats(mml).split(",").map(readPart);
 
-  const read = readPart(parts[0]);
-  const pickup = leadIn(read.barLines, beatsPerBar);
-  const notes = read.notes.map((note) => ({
-    ...note,
-    beat: note.beat + pickup,
-  }));
+  // The pickup is a property of the song, not of a voice within it, so it is read once from the
+  // first part; every part's bar lines are then checked against it, which catches a part that has
+  // drifted out of step with the others.
+  const pickup = leadIn(parts[0].barLines, beatsPerBar);
 
-  for (const at of read.barLines) {
-    const beat = at + pickup;
-    if (Math.abs(beat % beatsPerBar) > 1e-6) {
+  for (const part of parts) {
+    for (const at of part.barLines) {
+      const beat = at + pickup;
+      if (Math.abs(beat % beatsPerBar) > 1e-6) {
+        throw new Error(
+          `A bar line falls ${
+            (beat % beatsPerBar).toFixed(3)
+          } beats into a bar of ${beatsPerBar}.`,
+        );
+      }
+    }
+    if (Math.abs(part.beats - parts[0].beats) > 1e-6) {
       throw new Error(
-        `A bar line falls ${
-          (beat % beatsPerBar).toFixed(3)
-        } beats into a bar of ${beatsPerBar}.`,
+        `The parts are ${
+          parts.map((one) => one.beats).join(" and ")
+        } beats long; parts play together, so they all last as long as the song.`,
       );
     }
   }
 
-  const total = read.beats + pickup;
+  const total = parts[0].beats + pickup;
   if (Math.abs(total % beatsPerBar) > 1e-6) {
     throw new Error(
       `The melody is ${total} beats, which is not a whole number of ${beatsPerBar}-beat bars.`,
     );
   }
 
-  return { notes, bars: total / beatsPerBar, bpm: read.tempo, pickup };
+  // In time order, and a chord's notes low to high: the game reads the last note of the list to
+  // know when the song is over, and draws them in the order it is given.
+  const notes = parts
+    .flatMap((part) => part.notes)
+    .map((note) => ({ ...note, beat: note.beat + pickup }))
+    .sort((a, b) => a.beat - b.beat || a.midi - b.midi);
+
+  return { notes, bars: total / beatsPerBar, bpm: tempoOf(parts), pickup };
+}
+
+/**
+ * The one tempo the parts agree on.
+ *
+ * A part that says nothing about the tempo takes the song's; two that disagree are a mistake in the
+ * writing, not something to resolve by picking one.
+ */
+function tempoOf(parts: readonly Read[]): number {
+  const set = new Set(
+    parts.map((part) => part.tempo).filter((tempo) => tempo !== null),
+  );
+  if (set.size > 1) {
+    throw new Error(
+      `The parts set the tempo to ${
+        [...set].join(" and ")
+      }; a song holds one tempo.`,
+    );
+  }
+  return [...set][0] ?? DEFAULT_TEMPO;
 }
 
 /**
@@ -106,14 +140,15 @@ interface Read {
   /** Where each `|` fell, in beats from the start of what was written. */
   barLines: number[];
   beats: number;
-  tempo: number;
+  /** What this part's `t` said, or null when it did not say. */
+  tempo: number | null;
 }
 
 /** Walks one part, left to right, carrying the state the commands change. */
 function readPart(part: string): Read {
   const notes: Note[] = [];
   const barLines: number[] = [];
-  let tempo = DEFAULT_TEMPO;
+  let tempo: number | null = null;
   let length = DEFAULT_LENGTH;
   let octave = DEFAULT_OCTAVE;
   let beat = 0;
@@ -152,7 +187,7 @@ function readPart(part: string): Read {
       const [value, next] = number(part, at + 1, char);
       at = next;
       if (char === "t") {
-        if (sounded && value !== tempo) {
+        if (sounded && tempo !== null && value !== tempo) {
           throw new Error(
             "The tempo changes part-way through; the game holds one tempo per song.",
           );
