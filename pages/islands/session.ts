@@ -76,6 +76,9 @@ export class Session {
   #frame = 0;
   #auto = false;
   #autoUsed = false;
+  /** When the last note stops sounding, on the game clock. A chord makes this the later of its
+   * notes, which is not always the one the list ends with. */
+  #end = 0;
 
   #score = 0;
   #combo = 0;
@@ -130,6 +133,10 @@ export class Session {
     this.#origin = this.#tones.now() + leadIn;
     for (const note of this.#notes) {
       note.at = this.#origin + note.beat * this.#secondsPerBeat;
+      this.#end = Math.max(
+        this.#end,
+        note.at + note.beats * this.#secondsPerBeat,
+      );
     }
 
     this.#running = true;
@@ -184,6 +191,7 @@ export class Session {
     } else if (!paused && this.#pausedAt !== null) {
       const stopped = this.#tones.now() - this.#pausedAt;
       this.#origin += stopped;
+      this.#end += stopped;
       for (const note of this.#notes) note.at += stopped;
       this.#pausedAt = null;
     }
@@ -261,13 +269,11 @@ export class Session {
       ),
       progress: Math.min(1, played),
       flash: this.#flash,
+      lowest: this.song.lowest,
+      highest: this.song.highest,
     });
 
-    const last = this.#notes[this.#notes.length - 1];
-    if (
-      this.#running &&
-      now > last.at + last.beats * this.#secondsPerBeat + TAIL_SECONDS
-    ) {
+    if (this.#running && now > this.#end + TAIL_SECONDS) {
       this.stop();
       this.#onFinish(this.#result());
     }
