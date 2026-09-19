@@ -60,14 +60,70 @@ Deno.test("case means nothing, in a link or anywhere else", () => {
   );
 });
 
-Deno.test("a link reads back as what was written into it", () => {
+Deno.test("a link reads back as the same music, spacing aside", () => {
   const spec: CustomSpec = {
     mml: "t90 l4 o4 | c d | e f",
     title: "ためし",
     beatsPerBar: 2,
     clef: "bass",
   };
-  assertEquals(readSearch(searchFor(spec)), spec);
+  const back = readSearch(searchFor(spec));
+  if (back === null) throw new Error("the link carried no melody");
+  assertEquals({ ...back, mml: spec.mml }, spec);
+  assertEquals(
+    readMml(back.mml, spec.beatsPerBar),
+    readMml(spec.mml, spec.beatsPerBar),
+  );
+});
+
+/**
+ * Every melody on the song list, as it is written rather than as it was read.
+ *
+ * A {@link Song} keeps its notes, not the notation they came from, so this goes to the source —
+ * which makes the list below the corpus this property is checked against, and a song added later
+ * joins it without anyone remembering to.
+ */
+async function written(): Promise<string[]> {
+  const source = await Deno.readTextFile(
+    new URL("../islands/songs.ts", import.meta.url),
+  );
+  const found = [...source.matchAll(/mml: `([^`]*)`/g)].map((match) =>
+    match[1]
+  );
+  // A change to how a song is written must not quietly stop this covering them.
+  assertEquals(found.length, SONGS.length);
+  return found;
+}
+
+Deno.test("taking the spacing out never changes the music", async () => {
+  const melodies = await written();
+  for (const [index, mml] of melodies.entries()) {
+    const song = SONGS[index];
+    assertEquals(
+      readMml(mml.replace(/\s+/g, ""), song.beatsPerBar),
+      readMml(mml, song.beatsPerBar),
+      song.id,
+    );
+  }
+});
+
+Deno.test("closing a gap cannot run two numbers together", () => {
+  // Nothing in the notation begins with a digit, so a number always ends where
+  // the next thing begins — which is what makes the link safe to squeeze.
+  for (
+    const [spaced, bare] of [
+      ["t120 l8 o4 c", "t120l8o4c"],
+      ["c4 d4", "c4d4"],
+      ["o4 c4. d8 e2", "o4c4.d8e2"],
+      ["c4 & c4 d2", "c4&c4d2"],
+      ["[ o4 c4 d4 ]3 e2", "[o4c4d4]3e2"],
+      ["o4 c4 , o3 c4", "o4c4,o3c4"],
+      ["o4 | c4 d4 e4 f4 | g1", "o4|c4d4e4f4|g1"],
+      ["o4 n60 n62 c+4 d-4", "o4n60n62c+4d-4"],
+    ]
+  ) {
+    assertEquals(readMml(bare, 4), readMml(spaced, 4), spaced);
+  }
 });
 
 Deno.test("a link carries only what is not already the default", () => {
@@ -75,9 +131,12 @@ Deno.test("a link carries only what is not already the default", () => {
   assertEquals(search.includes("beats="), false);
   assertEquals(search.includes("clef="), false);
   assertEquals(search.includes("title="), false);
-  // Runs of whitespace collapse, so a melody written over several lines still
-  // makes a link short enough to send.
-  assertEquals(searchFor({ ...BLANK, mml: " c\n  d\te " }), "?mml=c+d+e");
+  // Whitespace is for writing, not for playing, so none of it reaches the link.
+  assertEquals(searchFor({ ...BLANK, mml: " c\n  d\te " }), "?mml=cde");
+  assertEquals(
+    searchFor({ ...BLANK, mml: "t120 l4 o4 | c d e f" }),
+    "?mml=t120l4o4%7Ccdef",
+  );
 });
 
 Deno.test("the custom id belongs to no song on the list", () => {

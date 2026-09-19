@@ -72,12 +72,16 @@ export function readSearch(search: string): CustomSpec | null {
  * The query string that carries a melody.
  *
  * Only what differs from the defaults, so the short melody someone typed by hand stays a short
- * link. Runs of whitespace collapse to one space: the notation reads the same and the link is
- * shorter, which matters when it is going into a message.
+ * link. Whitespace goes entirely: it is there to make the notation readable while it is being
+ * written, and a link is not read — the reader skips it, so `c d e` and `cde` are the same music,
+ * and the shorter one is the one that survives being pasted into a message.
+ *
+ * This is safe for anything that reads at all. No token in the notation begins with a digit, so
+ * closing a gap can never run two numbers together into a third.
  */
 export function searchFor(spec: CustomSpec): string {
   const params = new URLSearchParams();
-  params.set("mml", spec.mml.trim().replace(/\s+/g, " "));
+  params.set("mml", spec.mml.replace(/\s+/g, ""));
   if (spec.title.trim() !== "") params.set("title", spec.title.trim());
   if (spec.beatsPerBar !== BLANK.beatsPerBar) {
     params.set("beats", String(spec.beatsPerBar));
