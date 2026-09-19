@@ -1114,11 +1114,33 @@ body.bare {
   gap: 0.25rem;
 }
 
+/* What the melody is, and the button that plays it, on one line. */
+
+.maker__hear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .maker__actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* The preview button, and the ▶ or ■ in front of its label. */
+
+.maker .toggle span[aria-hidden] {
+  margin-right: 0.35rem;
+  font-size: 0.8em;
+}
+
+.maker .toggle.is-playing {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 /* The two buttons are the game's, and the game's palette is not this page's. */

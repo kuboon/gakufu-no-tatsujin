@@ -15,6 +15,7 @@ import { on, ref } from "@remix-run/ui";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
+import { Tones } from "./audio.ts";
 import type { ClefName } from "./clefs.ts";
 import {
   BLANK,
@@ -27,6 +28,22 @@ import {
 import { WHITE_KEYS, whiteKeysNeeded } from "./keyboard.ts";
 import { noteColor, pitchLabel, solfa } from "./music.ts";
 import type { Song } from "./songs.ts";
+
+/** Silence in front of the first note, so it is not clipped by the context starting up. */
+const LEAD_SECONDS = 0.3;
+
+/**
+ * How far ahead notes are handed to the audio clock, and how often that is topped up.
+ *
+ * A rolling window rather than the whole melody at once. Scheduling everything would build an
+ * oscillator per note the moment the button is pressed, which a long melody makes expensive for no
+ * gain — nothing past the next second is audible yet, and stopping throws it all away.
+ */
+const WINDOW_SECONDS = 1.5;
+const SWEEP_MS = 500;
+
+/** Held after the last note, so the ending is not cut off. */
+const TAIL_SECONDS = 0.6;
 
 /** What the 「例を入れる」 button writes: かえるのうた, which everyone can check by ear. */
 const EXAMPLE = "t120 l4 o4 | c d e f | e d c r | e f g a | g f e r";
@@ -53,6 +70,13 @@ export const Maker = island(
     let spec: CustomSpec = BLANK;
     let result: CustomResult = buildCustom(BLANK);
     let copied = false;
+
+    // The preview. A play-through gets its own audio context and closing it is
+    // what stops the sound: notes already handed to the clock cannot be taken
+    // back one by one, and the context going away takes all of them at once.
+    let tones: Tones | null = null;
+    let playing = false;
+    let sweep = 0;
 
     // The live fields. Held so the URL this page was opened with can be poured
     // into them once, and so the example button has something to write to.
@@ -95,11 +119,75 @@ export const Maker = island(
     }
 
     function change(patch: Partial<CustomSpec>): void {
+      // What is playing is no longer what is written, so it stops.
+      silence();
       spec = { ...spec, ...patch };
       result = buildCustom(spec);
       copied = false;
       void handle.update();
     }
+
+    /**
+     * Plays the melody, or stops it if it is already playing.
+     *
+     * The wait for the context matters: until it is actually running the clock
+     * {@link Tones.now} hands back is the wall clock, and a note scheduled
+     * against that would land hours away.
+     */
+    async function listen(made: Song): Promise<void> {
+      if (playing) {
+        silence();
+        return;
+      }
+
+      const fresh = new Tones();
+      tones = fresh;
+      playing = true;
+      void handle.update();
+
+      await fresh.unlock();
+      // Stopped, or the melody was edited, while the context was opening.
+      if (tones !== fresh) return;
+
+      const perBeat = 60 / made.bpm;
+      const origin = fresh.now() + LEAD_SECONDS;
+      const last = Math.max(
+        ...made.notes.map((note) => note.beat + note.beats),
+      ) * perBeat;
+      // The notes are in time order, so this walks them once.
+      let next = 0;
+
+      const step = (): void => {
+        if (tones !== fresh) return;
+        const until = fresh.now() + WINDOW_SECONDS;
+        while (next < made.notes.length) {
+          const note = made.notes[next];
+          const at = origin + note.beat * perBeat;
+          if (at > until) break;
+          fresh.note(note.midi, at, note.beats * perBeat);
+          next += 1;
+        }
+        if (fresh.now() < origin + last + TAIL_SECONDS) {
+          sweep = setTimeout(step, SWEEP_MS);
+        } else {
+          silence();
+        }
+      };
+      step();
+    }
+
+    /** Stops the preview, and takes the sound already scheduled with it. */
+    function silence(): void {
+      clearTimeout(sweep);
+      tones?.dispose();
+      tones = null;
+      if (!playing) return;
+      playing = false;
+      void handle.update();
+    }
+
+    // Leaving the page mid-preview must not leave a context open behind it.
+    handle.signal.addEventListener("abort", silence);
 
     function useExample(): void {
       if (mmlNode === null) return;
@@ -179,17 +267,28 @@ export const Maker = island(
             {whiteKeysNeeded(made.lowest, made.highest)}つぶん。 鍵盤は白鍵{" "}
             {WHITE_KEYS} つなので、これより広い曲は弾けません。
           </p>
-          <span class="maker__colors">
-            {pitches.map((midi) => (
-              <span
-                key={midi}
-                class="dot"
-                style={`background:${noteColor(midi)}`}
-                title={solfa(midi)}
-              >
-              </span>
-            ))}
-          </span>
+          <div class="maker__hear">
+            <span class="maker__colors">
+              {pitches.map((midi) => (
+                <span
+                  key={midi}
+                  class="dot"
+                  style={`background:${noteColor(midi)}`}
+                  title={solfa(midi)}
+                >
+                </span>
+              ))}
+            </span>
+            <button
+              type="button"
+              class={playing ? "toggle is-playing" : "toggle"}
+              aria-pressed={playing ? "true" : "false"}
+              mix={[on("click", () => void listen(made))]}
+            >
+              <span aria-hidden="true">{playing ? "■" : "▶"}</span>
+              {playing ? "とめる" : "きいてみる"}
+            </button>
+          </div>
         </div>
       );
     }
