@@ -1,5 +1,6 @@
 import type { RemixNode } from "@remix-run/ui";
 
+import { base } from "../lib/base.ts";
 import { Link } from "../lib/link.tsx";
 import { Maker } from "../islands/maker.tsx";
 
@@ -19,12 +20,12 @@ export default function Make(): RemixNode {
         旋律を書くと、その曲が遊べるリンクができます。曲は全部リンクの中に入っているので、
         送る先はどこでも構いませんし、こちらには何も保存されません。
       </p>
-      <Maker />
+      <Maker base={base} />
       <p>
-        できた曲は <Link href=".">楽譜の達人</Link>{" "}
+        できた曲は <Link href={`${base}/`}>楽譜の達人</Link>{" "}
         の曲一覧のいちばん上に出ます。リンクで届いた曲は実績にも記録にも入りません。
-        書きかたの詳しい説明は <Link href="about">このサイトについて</Link>{" "}
-        にもあります。
+        書きかたの詳しい説明は{" "}
+        <Link href={`${base}/about`}>このサイトについて</Link> にもあります。
       </p>
     </>
   );

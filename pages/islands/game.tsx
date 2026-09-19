@@ -45,6 +45,11 @@ const LEGEND = [60, 62, 64, 65, 67, 69, 71];
  * The client runtime would otherwise treat a same-site link as a navigation to handle itself, and
  * this site is a set of separately built pages rather than one app. Not in the JSX prop types,
  * which is why it is spread rather than written.
+ *
+ * The href beside it is always absolute, built from the deploy prefix the page hands down. A
+ * relative one would resolve against wherever the game happens to be served from, and the game is
+ * served at the prefix itself — with a trailing slash on the published site, without one on a PR
+ * preview — so the same link would mean two different pages.
  */
 const DOCUMENT_LINK = { "rmx-document": "" } as Record<string, string>;
 
@@ -56,7 +61,7 @@ interface OrientationLock {
 export const Game = island(
   "game",
   "Game",
-  function Game(handle: Handle<Record<never, never>>) {
+  function Game(handle: Handle<{ base: string }>) {
     const tones = new Tones();
 
     let phase: Phase = "select";
@@ -395,7 +400,11 @@ export const Game = island(
             <div class="select__side">
               {autoButton()}
               {midiButton()}
-              <a class="toggle" href="make" {...DOCUMENT_LINK}>
+              <a
+                class="toggle"
+                href={`${handle.props.base}/make`}
+                {...DOCUMENT_LINK}
+              >
                 曲をつくる
               </a>
               <span class="select__hint">
@@ -442,7 +451,9 @@ export const Game = island(
               <span class="song__spacer"></span>
               <a
                 class="song__state"
-                href={`make${globalThis.location?.search ?? ""}`}
+                href={`${handle.props.base}/make${
+                  globalThis.location?.search ?? ""
+                }`}
                 {...DOCUMENT_LINK}
               >
                 なおす

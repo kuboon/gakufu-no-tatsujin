@@ -49,7 +49,7 @@ const NOTATION: readonly (readonly [string, string])[] = [
 export const Maker = island(
   "maker",
   "Maker",
-  function Maker(handle: Handle<Record<never, never>>) {
+  function Maker(handle: Handle<{ base: string }>) {
     let spec: CustomSpec = BLANK;
     let result: CustomResult = buildCustom(BLANK);
     let copied = false;
@@ -107,11 +107,18 @@ export const Maker = island(
       change({ mml: EXAMPLE });
     }
 
-    /** The link that plays it: this page's own directory, which is the game. */
+    /**
+     * The link that plays it.
+     *
+     * Absolute, and built from the deploy prefix the page hands down rather than from where this
+     * page happens to sit: the game is served at the prefix itself, which carries a trailing slash
+     * on the published site and none on a PR preview, so a relative path would land in a different
+     * place depending on which one someone opened.
+     */
     function link(): string {
       const here = globalThis.location?.href;
       if (here === undefined) return "";
-      return new URL(`.${searchFor(spec)}`, here).href;
+      return new URL(`${handle.props.base}/${searchFor(spec)}`, here).href;
     }
 
     async function copy(): Promise<void> {
