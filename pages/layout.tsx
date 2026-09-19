@@ -100,6 +100,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
             <Link class="brand" href={home}>楽譜の達人</Link>
             <nav class="site-nav">
               <Link href={home}>ゲーム</Link>
+              <Link href={`${base}/make`}>曲をつくる</Link>
               <Link href={`${base}/about`}>About</Link>
               <Link href={`${base}/blog`}>Blog</Link>
             </nav>

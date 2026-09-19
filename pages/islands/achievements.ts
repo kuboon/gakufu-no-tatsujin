@@ -10,6 +10,10 @@
  * have been finished, the best score on each, and which achievements have come
  * up. All of it is a per-device convenience — enough to put a score on a song
  * card without a round trip. The record that counts is the hub's.
+ *
+ * A melody that arrived in the page's URL is outside all of it. It is not on
+ * the list, so it cannot be cleared, cannot carry a best, and cannot earn an
+ * achievement — its writer chose how hard it is.
  */
 
 import type { Result } from "./session.ts";
@@ -149,6 +153,9 @@ const STORAGE_KEY = "gakufu:progress";
  * @returns The achievements to report, in the order to show them
  */
 export function earned(result: Result, before: Progress): Earned[] {
+  // A melody out of a URL is whatever its writer made it, so every rank on it
+  // would be one they handed themselves. It plays; it never counts.
+  if (result.song.custom === true) return [];
   // The demo player is for listening, so it is never evidence of playing.
   if (result.usedAuto) return [{ key: "listen_through" }];
 
@@ -214,6 +221,10 @@ export function recordProgress(
   previous: Progress,
   won: readonly Earned[] = [],
 ): Progress {
+  // A URL melody leaves no trace at all: not the clear, not the score, not the
+  // best. It is not one of the songs, so there is nothing here to say about it.
+  if (result.song.custom === true) return previous;
+
   const cleared = new Set(previous.cleared);
   if (!result.usedAuto) cleared.add(result.song.id);
 

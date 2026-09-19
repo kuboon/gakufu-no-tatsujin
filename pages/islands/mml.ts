@@ -18,6 +18,14 @@
 
 import { type Note, noteShape } from "./music.ts";
 
+/**
+ * How long the notation may grow once its repeats are written out.
+ *
+ * Melodies arrive from a URL now, so `[c]999999999` is something a stranger can hand you. The cap
+ * is far above any melody anyone writes and far below what would cost the reader anything.
+ */
+const MAX_LENGTH = 20_000;
+
 /** Letters `c`–`b`, in semitones above C. */
 const LETTER_SEMITONES: Record<string, number> = {
   c: 0,
@@ -36,6 +44,7 @@ const DEFAULT_OCTAVE = 4;
 /** A melody read out of MML. */
 export interface Melody {
   notes: Note[];
+  /** How many bars the melody covers. A melody that stops mid-bar still occupies the whole bar. */
   bars: number;
   /** From the `t` command — a quarter note per beat, so this is the song's BPM. */
   bpm: number;
@@ -52,12 +61,14 @@ export interface Melody {
 /**
  * Reads a melody written in MML.
  *
- * @param mml The song, e.g. `"t120 l4 o4 | c d e f | e d c2"`
+ * @param mml The song, e.g. `"t120 l4 o4 | c d e f | e d c2"`. Upper case reads the same.
  * @param beatsPerBar The time signature's beats — MML carries no time signature
  * @returns The notes, in beats from the first downbeat of bar 1
  */
 export function readMml(mml: string, beatsPerBar: number): Melody {
-  const parts = expandRepeats(mml).split(",").map(readPart);
+  // Case means nothing in this notation, and a melody typed into a URL bar arrives in whatever
+  // case the writer felt like — `?mml=CDE` as readily as `?mml=cde`.
+  const parts = expandRepeats(mml.toLowerCase()).split(",").map(readPart);
 
   // The pickup is a property of the song, not of a voice within it, so it is read once from the
   // first part; every part's bar lines are then checked against it, which catches a part that has
@@ -69,25 +80,29 @@ export function readMml(mml: string, beatsPerBar: number): Melody {
       const beat = at + pickup;
       if (Math.abs(beat % beatsPerBar) > 1e-6) {
         throw new Error(
-          `A bar line falls ${
+          `小節線が小節の頭から${
             (beat % beatsPerBar).toFixed(3)
-          } beats into a bar of ${beatsPerBar}.`,
+          }拍ずれています。1小節は${beatsPerBar}拍です。`,
         );
       }
     }
     if (Math.abs(part.beats - parts[0].beats) > 1e-6) {
       throw new Error(
-        `The parts are ${
-          parts.map((one) => one.beats).join(" and ")
-        } beats long; parts play together, so they all last as long as the song.`,
+        `パートの長さが${
+          parts.map((one) => one.beats).join("拍と")
+        }拍でちがいます。パートは同時に鳴るので、どれも曲と同じ長さにしてください。`,
       );
     }
   }
 
+  // Bar lines are an accounting, and one that does not balance is a mistake worth stopping for.
+  // A melody that writes none is not accounting for anything — `?mml=cde` is three notes and a
+  // wish — so its last bar is simply short, and the rest of it is silence.
   const total = parts[0].beats + pickup;
-  if (Math.abs(total % beatsPerBar) > 1e-6) {
+  const accounted = parts.some((part) => part.barLines.length > 0);
+  if (accounted && Math.abs(total % beatsPerBar) > 1e-6) {
     throw new Error(
-      `The melody is ${total} beats, which is not a whole number of ${beatsPerBar}-beat bars.`,
+      `旋律が${total}拍で、${beatsPerBar}拍の小節に割り切れません。`,
     );
   }
 
@@ -98,7 +113,12 @@ export function readMml(mml: string, beatsPerBar: number): Melody {
     .map((note) => ({ ...note, beat: note.beat + pickup }))
     .sort((a, b) => a.beat - b.beat || a.midi - b.midi);
 
-  return { notes, bars: total / beatsPerBar, bpm: tempoOf(parts), pickup };
+  return {
+    notes,
+    bars: Math.ceil(total / beatsPerBar - 1e-9),
+    bpm: tempoOf(parts),
+    pickup,
+  };
 }
 
 /**
@@ -113,9 +133,9 @@ function tempoOf(parts: readonly Read[]): number {
   );
   if (set.size > 1) {
     throw new Error(
-      `The parts set the tempo to ${
-        [...set].join(" and ")
-      }; a song holds one tempo.`,
+      `パートによってテンポが${
+        [...set].join("と")
+      }でちがいます。曲のテンポはひとつです。`,
     );
   }
   return [...set][0] ?? DEFAULT_TEMPO;
@@ -189,7 +209,7 @@ function readPart(part: string): Read {
       if (char === "t") {
         if (sounded && tempo !== null && value !== tempo) {
           throw new Error(
-            "The tempo changes part-way through; the game holds one tempo per song.",
+            "テンポが途中で変わっています。曲のテンポはひとつです。",
           );
         }
         tempo = value;
@@ -219,7 +239,7 @@ function readPart(part: string): Read {
       }
       midi = (octave + 1) * 12 + semitones;
     } else {
-      throw new Error(`"${char}" is not part of this notation.`);
+      throw new Error(`「${char}」はこの書きかたにない文字です。`);
     }
 
     // The length, then any dots, then the beats they add up to.
@@ -247,7 +267,7 @@ function readPart(part: string): Read {
     const previous = notes[notes.length - 1];
     if (tie) {
       if (previous === undefined || previous.midi !== midi) {
-        throw new Error("A tie has to join two notes of the same pitch.");
+        throw new Error("タイ（&）は同じ高さの音どうしをつなぎます。");
       }
       previous.beats += beats;
       noteShape(previous.beats);
@@ -260,7 +280,7 @@ function readPart(part: string): Read {
     beat += beats;
   }
 
-  if (tie) throw new Error("A tie is left hanging at the end of the melody.");
+  if (tie) throw new Error("タイ（&）が旋律の終わりで宙に浮いています。");
   return { notes, barLines, beats: beat, tempo };
 }
 
@@ -273,7 +293,7 @@ function number(
   let at = from;
   while (at < source.length && /\d/.test(source[at])) at += 1;
   if (at === from) {
-    throw new Error(`"${command}" needs a number after it.`);
+    throw new Error(`「${command}」のあとには数字が要ります。`);
   }
   return [Number(source.slice(from, at)), at];
 }
@@ -286,26 +306,37 @@ function number(
  * same thing a player does when their eye goes back to the bracket.
  */
 function expandRepeats(mml: string): string {
+  if (mml.length > MAX_LENGTH) throw new Error("楽譜が長すぎます。");
   let source = mml;
   for (let guard = 0; guard < 100; guard += 1) {
     const close = source.indexOf("]");
     if (close === -1) {
-      if (source.includes("[")) throw new Error("A repeat is never closed.");
+      if (source.includes("[")) {
+        throw new Error("くり返しの [ が閉じていません。");
+      }
       return source;
     }
     const open = source.lastIndexOf("[", close);
-    if (open === -1) throw new Error("A repeat is closed but never opened.");
+    if (open === -1) throw new Error("くり返しの ] に対する [ がありません。");
 
     let after = close + 1;
     while (after < source.length && /\d/.test(source[after])) after += 1;
     const times = after > close + 1
       ? Number(source.slice(close + 1, after))
       : 2;
-    if (!(times >= 0)) throw new Error("A repeat count cannot be negative.");
+    if (!(times >= 0)) {
+      throw new Error("くり返しの回数にマイナスは書けません。");
+    }
 
     const body = source.slice(open + 1, close);
+    if ((body.length + 2) * times > MAX_LENGTH) {
+      throw new Error("くり返しを書き出すと長くなりすぎます。");
+    }
     source = source.slice(0, open) + ` ${body} `.repeat(times) +
       source.slice(after);
+    if (source.length > MAX_LENGTH) {
+      throw new Error("くり返しを書き出すと長くなりすぎます。");
+    }
   }
-  throw new Error("This melody nests repeats deeper than the reader follows.");
+  throw new Error("くり返しの入れ子が深すぎます。");
 }

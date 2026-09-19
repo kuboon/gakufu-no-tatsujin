@@ -55,6 +55,11 @@ export function solfa(midi: number): string {
   return SOLFA[pitchClass(midi)];
 }
 
+/** The note as a person says it, octave and all: `ラ♯3`. What a message about a pitch names. */
+export function pitchLabel(midi: number): string {
+  return `${solfa(midi)}${Math.floor(midi / 12) - 1}`;
+}
+
 /** Hue in degrees: the twelve semitones split the colour wheel evenly, C at 0°. */
 export function hue(midi: number): number {
   return pitchClass(midi) * 30;
@@ -101,7 +106,7 @@ export function isSharpened(midi: number): boolean {
 export function midiFromName(name: string): number {
   const match = /^([A-G])(#?)(-?\d)$/.exec(name);
   if (match === null) {
-    throw new Error(`"${name}" is not a note name like "C4" or "F#4".`);
+    throw new Error(`「${name}」は "C4" や "F#4" のような音名ではありません。`);
   }
   const letter = LETTERS.indexOf(match[1]);
   const octave = Number(match[3]);
@@ -147,7 +152,7 @@ export function noteShape(beats: number): NoteShape {
       }
     }
   }
-  throw new Error(`${beats} beats is not a note value this staff can write.`);
+  throw new Error(`${beats}拍は音符で書けない長さです。`);
 }
 
 /** One note of a melody. */
