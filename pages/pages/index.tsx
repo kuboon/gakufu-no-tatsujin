@@ -1,5 +1,6 @@
 import type { RemixNode } from "@remix-run/ui";
 
+import { base } from "../lib/base.ts";
 import { ACHIEVEMENTS } from "../islands/achievements.ts";
 import { AUTHOR, SLUG } from "../islands/gamecenter.ts";
 import { Game } from "../islands/game.tsx";
@@ -43,5 +44,5 @@ export const head: RemixNode = (
 );
 
 export default function Home(): RemixNode {
-  return <Game />;
+  return <Game base={base} />;
 }

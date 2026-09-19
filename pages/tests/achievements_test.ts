@@ -7,6 +7,7 @@ import {
   recordProgress,
   SCORE_KEY,
 } from "../islands/achievements.ts";
+import { buildCustom } from "../islands/custom.ts";
 import type { Result } from "../islands/session.ts";
 import { songById, SONGS } from "../islands/songs.ts";
 
@@ -175,4 +176,25 @@ Deno.test("the demo player leaves no score behind", () => {
   assertEquals(after.cleared, []);
   assertEquals(after.bests, { tulip: 0 });
   assertEquals(after.best, 0);
+});
+
+Deno.test("a melody out of a URL earns nothing and records nothing", () => {
+  const made = buildCustom({
+    mml: "o4 l4 | c d e f",
+    title: "",
+    beatsPerBar: 4,
+    clef: "treble",
+  });
+  if ("error" in made) throw new Error(made.error);
+
+  // A flawless run on it, which on any song of the list would be worth four.
+  const run = played({ song: made.song, score: 99_999 });
+  assertEquals(keys(run), []);
+
+  const before = remembered({
+    cleared: ["tulip"],
+    best: 500,
+    bests: { tulip: 500 },
+  });
+  assertEquals(recordProgress(run, before), before);
 });

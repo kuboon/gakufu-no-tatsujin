@@ -61,7 +61,7 @@ Deno.test("a repeat writes its body out, default twice", () => {
 
 Deno.test("a tie joins two notes of the same pitch into one", () => {
   assertEquals(played("o4 l4 c&c c2"), ["60@0+2", "60@2+2"]);
-  assertThrows(() => played("o4 l4 c&d c2"), Error, "same pitch");
+  assertThrows(() => played("o4 l4 c&d c2"), Error, "同じ高さの音どうし");
 });
 
 Deno.test("the tempo comes from t, and cannot change part-way", () => {
@@ -71,7 +71,7 @@ Deno.test("the tempo comes from t, and cannot change part-way", () => {
   assertThrows(
     () => readMml("t100 o4 l1 c t120 c", 8),
     Error,
-    "one tempo per song",
+    "テンポが途中で変わっています",
   );
 });
 
@@ -87,23 +87,27 @@ Deno.test("a bar line off the grid is a build error, not a drifting melody", () 
   assertThrows(
     () => readMml("o4 l4 c c c c | c c c | c", 4),
     Error,
-    "bar line falls",
+    "小節線が小節の頭から",
   );
   assertThrows(
-    () => readMml("o4 l4 c c c", 4),
+    () => readMml("o4 l4 | c c c", 4),
     Error,
-    "not a whole number",
+    "割り切れません",
   );
 });
 
 Deno.test("a length no note head can write is refused", () => {
-  assertThrows(() => readMml("o4 l3 c", 4), Error, "note value");
+  assertThrows(() => readMml("o4 l3 c", 4), Error, "音符で書けない長さ");
 });
 
 Deno.test("notation the reader does not know is refused", () => {
-  assertThrows(() => readMml("o4 l4 z", 4), Error, "not part of this notation");
-  assertThrows(() => readMml("o4 l4 [ c", 4), Error, "never closed");
-  assertThrows(() => readMml("o4 l4 c ]", 4), Error, "never opened");
+  assertThrows(() => readMml("o4 l4 z", 4), Error, "この書きかたにない文字");
+  assertThrows(() => readMml("o4 l4 [ c", 4), Error, "[ が閉じていません");
+  assertThrows(
+    () => readMml("o4 l4 c ]", 4),
+    Error,
+    "] に対する [ がありません",
+  );
 });
 
 Deno.test("parts separated by a comma play at once", () => {
@@ -123,7 +127,7 @@ Deno.test("either part may set the tempo, and they have to agree", () => {
   assertThrows(
     () => readMml("t90 l4 o4 c , t120 l4 o3 c", 1),
     Error,
-    "one tempo",
+    "曲のテンポはひとつ",
   );
 });
 
@@ -131,12 +135,12 @@ Deno.test("parts have to be the same length, and share the bar lines", () => {
   assertThrows(
     () => readMml("l4 o4 | c c | c c , l4 o3 | c c | c", 2),
     Error,
-    "as long as the song",
+    "どれも曲と同じ長さ",
   );
   assertThrows(
     () => readMml("l4 o4 | c c | c c , l4 o3 | c | c c c", 2),
     Error,
-    "bar line falls",
+    "小節線が小節の頭から",
   );
 });
 

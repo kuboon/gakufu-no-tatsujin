@@ -51,13 +51,22 @@ body {
 .brand {
   font-weight: 700;
   font-size: 1.1rem;
+  white-space: nowrap;
   text-decoration: none;
   color: var(--fg);
 }
 
 .site-nav {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.5rem 1rem;
+}
+
+/* A nav item that breaks across two lines reads as two items. */
+
+.site-nav a {
+  white-space: nowrap;
 }
 
 .site-main {
@@ -537,6 +546,14 @@ body.bare {
   color: var(--ink-faint);
 }
 
+/* A narrow screen is a phone, which has neither the room for this line nor a keyboard to use it. */
+
+@media (max-width: 44rem) {
+  .select__hint {
+    display: none;
+  }
+}
+
 /* --- the score at the end --- */
 
 .result {
@@ -673,6 +690,7 @@ body.bare {
   color: var(--ink);
   font-size: clamp(0.62rem, 3vh, 0.78rem);
   font-weight: 600;
+  white-space: nowrap;
   text-decoration: none;
   border-radius: 999px;
   border: 1px solid rgba(253, 242, 228, 0.3);
@@ -896,4 +914,272 @@ body.bare {
 
 .award__points {
   opacity: 0.75;
+}
+
+/* --- a melody the URL carried --- */
+
+/* Full width at the top of the list: it is the one card the visitor came for. */
+
+.songs__custom {
+  grid-column: 1 / -1;
+}
+
+.song--custom {
+  border-color: rgba(255, 194, 71, 0.5);
+  background: linear-gradient(160deg, #3d2a17, #241811);
+}
+
+.song--broken {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  height: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid rgba(224, 113, 74, 0.55);
+  border-radius: 0.8rem;
+  background: linear-gradient(160deg, #3a2018, #241811);
+}
+
+.song--broken .song__credit {
+  white-space: normal;
+  overflow: visible;
+  color: var(--ink-soft);
+}
+
+/* The way out of a link that will not play: the editor, with the same notation already in it. */
+
+.song--broken .song__state {
+  align-self: flex-start;
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.song__badge {
+  padding: 0.05rem 0.4rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--accent);
+  border: 1px solid rgba(255, 194, 71, 0.5);
+  border-radius: 999px;
+}
+
+/* --- the editor --- */
+
+.maker {
+  display: grid;
+  gap: 1.2rem;
+  margin-block: 1.5rem;
+}
+
+.maker__form {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  background: var(--card);
+}
+
+.field {
+  display: grid;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.field__label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.field__aside {
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  cursor: pointer;
+}
+
+.field__input {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  font: inherit;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.maker__mml,
+.maker__link {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.maker__mml {
+  resize: vertical;
+}
+
+.maker__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.maker__row .field {
+  flex: 1 1 10rem;
+}
+
+.field--narrow {
+  flex: 0 1 8.5rem;
+}
+
+/* The one line that says the melody does not read yet. */
+
+.maker__error {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.92rem;
+  border: 1px solid rgba(220, 38, 38, 0.4);
+  border-radius: 0.5rem;
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.maker__error-mark {
+  flex-shrink: 0;
+  width: 1.15rem;
+  height: 1.15rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  line-height: 1.15rem;
+  text-align: center;
+  color: #fff;
+  background: #dc2626;
+  border-radius: 50%;
+}
+
+.maker__reading,
+.maker__share {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.maker__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maker__facts li {
+  display: flex;
+  flex-direction: column;
+}
+
+.maker__facts span {
+  font-size: 0.7rem;
+  color: var(--muted);
+}
+
+.maker__facts strong {
+  font-size: 1.05rem;
+}
+
+.maker__range {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.maker__colors {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+/* What the melody is, and the button that plays it, on one line. */
+
+.maker__hear {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.maker__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* The preview button, and the ▶ or ■ in front of its label. */
+
+.maker .toggle span[aria-hidden] {
+  margin-right: 0.35rem;
+  font-size: 0.8em;
+}
+
+.maker .toggle.is-playing {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* The two buttons are the game's, and the game's palette is not this page's. */
+
+.maker .toggle,
+.maker .primary {
+  cursor: pointer;
+  border-color: var(--border);
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.maker .primary {
+  color: #fff;
+  background: var(--accent);
+  border-color: transparent;
+}
+
+.maker__help summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.maker__table {
+  width: 100%;
+  margin-block: 0.8rem;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.maker__table th,
+.maker__table td {
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--border);
+}
+
+.maker__table th {
+  font-weight: 400;
+  white-space: nowrap;
 }

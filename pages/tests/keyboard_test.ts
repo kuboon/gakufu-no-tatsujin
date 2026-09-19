@@ -47,11 +47,11 @@ Deno.test("a song wider than the keyboard fails the build", () => {
   assertThrows(
     () => keyRange(midiFromName("C4"), midiFromName("C6")),
     Error,
-    `the keyboard shows ${WHITE_KEYS}`,
+    `鍵盤は${WHITE_KEYS}しかありません`,
   );
   // One white key too many is refused just the same.
   const tenth = keyRange(60, 60).to + 2;
-  assertThrows(() => keyRange(60, tenth), Error, "white keys");
+  assertThrows(() => keyRange(60, tenth), Error, "白鍵が10要ります");
 });
 
 Deno.test("white keys tile the width and black keys straddle the seams", () => {

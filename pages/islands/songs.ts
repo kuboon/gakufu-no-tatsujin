@@ -32,9 +32,16 @@ export interface Song {
   /** Range the keyboard has to cover. */
   lowest: number;
   highest: number;
+  /**
+   * A melody that arrived in the page's URL rather than off this list.
+   *
+   * It plays like any other song and counts for nothing: whoever wrote it chose how hard it is, so
+   * a rank earned on it would be a rank they handed themselves.
+   */
+  custom?: boolean;
 }
 
-interface SongSpec {
+export interface SongSpec {
   id: string;
   title: string;
   credit: string;
@@ -44,11 +51,37 @@ interface SongSpec {
   beatsPerBar: number;
   clef?: ClefName;
   mml: string;
+  custom?: boolean;
 }
 
-function song(spec: SongSpec): Song {
+/**
+ * How many notes one melody may hold.
+ *
+ * Every song on this list is well under a tenth of it. The cap is here because a melody can now
+ * come from a URL, and a stranger's link should not be able to hand the page more music than it
+ * can draw.
+ */
+const MAX_NOTES = 2_000;
+
+/**
+ * Turns one written entry into the song the game plays.
+ *
+ * Every check the melody has to pass lives here, so the list below and a melody someone wrote into
+ * a URL are held to exactly the same rules — the difference is only who sees the message when one
+ * fails: the build, or the person writing it.
+ *
+ * @throws When the melody cannot be read, cannot be written, or will not fit the keyboard
+ */
+export function song(spec: SongSpec): Song {
   const { mml, clef = "treble", ...rest } = spec;
   const { notes, bars, bpm } = readMml(mml, spec.beatsPerBar);
+  if (notes.length === 0) throw new Error("音符がひとつもありません。");
+  if (notes.length > MAX_NOTES) {
+    throw new Error(
+      `音符が${notes.length}個あります。${MAX_NOTES}個までです。`,
+    );
+  }
+
   const pitches = notes.map((note) => note.midi);
   const lowest = Math.min(...pitches);
   const highest = Math.max(...pitches);

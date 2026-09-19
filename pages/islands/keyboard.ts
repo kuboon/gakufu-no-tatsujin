@@ -5,7 +5,7 @@
  * — the same numbers place the keys in CSS and read back the same in any orientation.
  */
 
-import { isBlackKey } from "./music.ts";
+import { isBlackKey, pitchLabel } from "./music.ts";
 
 /** One key of the keyboard. */
 export interface KeyCap {
@@ -48,10 +48,12 @@ export function keyRange(
   highest: number,
 ): { from: number; to: number } {
   const from = whiteAtOrBelow(lowest);
-  const needed = whiteKeys(from, whiteAtOrAbove(highest));
+  const needed = whiteKeysNeeded(lowest, highest);
   if (needed > WHITE_KEYS) {
     throw new Error(
-      `A song from ${lowest} to ${highest} needs ${needed} white keys; the keyboard shows ${WHITE_KEYS}.`,
+      `${pitchLabel(lowest)}から${
+        pitchLabel(highest)
+      }までの曲は白鍵が${needed}要りますが、鍵盤は${WHITE_KEYS}しかありません。`,
     );
   }
 
@@ -61,6 +63,16 @@ export function keyRange(
     if (!isBlackKey(to + 1)) counted++;
   }
   return { from, to };
+}
+
+/**
+ * How many white keys a melody from `lowest` to `highest` has to be played on.
+ *
+ * Counted from the white key at or below the bottom to the one at or above the top, because a
+ * black key is reached over the white ones beside it rather than instead of them.
+ */
+export function whiteKeysNeeded(lowest: number, highest: number): number {
+  return whiteKeys(whiteAtOrBelow(lowest), whiteAtOrAbove(highest));
 }
 
 function whiteAtOrBelow(midi: number): number {

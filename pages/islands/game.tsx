@@ -20,6 +20,7 @@ import {
   recordProgress,
 } from "./achievements.ts";
 import { Tones } from "./audio.ts";
+import { buildCustom, readSearch } from "./custom.ts";
 import { GAME_PAGE, report, type Reported } from "./gamecenter.ts";
 import {
   keyboardLayout,
@@ -38,6 +39,20 @@ type Phase = "select" | "play" | "result";
 /** The white keys of one octave — the colour legend on the song list. */
 const LEGEND = [60, 62, 64, 65, 67, 69, 71];
 
+/**
+ * What marks an `<a>` as leaving this page for another document.
+ *
+ * The client runtime would otherwise treat a same-site link as a navigation to handle itself, and
+ * this site is a set of separately built pages rather than one app. Not in the JSX prop types,
+ * which is why it is spread rather than written.
+ *
+ * The href beside it is always absolute, built from the deploy prefix the page hands down. A
+ * relative one would resolve against wherever the game happens to be served from, and the game is
+ * served at the prefix itself — with a trailing slash on the published site, without one on a PR
+ * preview — so the same link would mean two different pages.
+ */
+const DOCUMENT_LINK = { "rmx-document": "" } as Record<string, string>;
+
 /** Elements that lock the screen to landscape, where the browser lets a page ask. */
 interface OrientationLock {
   lock?: (orientation: string) => Promise<void>;
@@ -46,7 +61,7 @@ interface OrientationLock {
 export const Game = island(
   "game",
   "Game",
-  function Game(handle: Handle<Record<never, never>>) {
+  function Game(handle: Handle<{ base: string }>) {
     const tones = new Tones();
 
     let phase: Phase = "select";
@@ -61,6 +76,12 @@ export const Game = island(
     // built ahead of time, so the first render has to be the blank one every
     // visitor's HTML carries; the real record arrives a beat later.
     let progress: Progress | null = null;
+    // The melody this page's own URL carries, if it carries one, and why it
+    // could not be read if it could not. Both wait for a browser: there is no
+    // query string at build time, and a card that appeared out of nowhere
+    // would disagree with the HTML every visitor is served.
+    let custom: Song | null = null;
+    let customError: string | null = null;
     // How far the player has got with a MIDI keyboard, if they asked for one.
     // "unknown" until there is a browser to ask, for the same reason the record
     // above is: the page is built ahead of time, and whether Web MIDI exists is
@@ -97,6 +118,13 @@ export const Game = island(
       if (progress !== null) return;
       progress = readProgress();
       midi = midiSupported() ? "off" : "unsupported";
+
+      const spec = readSearch(globalThis.location?.search ?? "");
+      if (spec !== null) {
+        const built = buildCustom(spec);
+        if ("song" in built) custom = built.song;
+        else customError = built.error;
+      }
       void handle.update();
     }
 
@@ -148,7 +176,7 @@ export const Game = island(
       // Read before anything is written: whether this is a personal best is a
       // question about the record that stood when the song started.
       const before = progress ?? readProgress();
-      beatBest = !finished.usedAuto &&
+      beatBest = !finished.usedAuto && finished.song.custom !== true &&
         finished.score > (before.bests[finished.song.id] ?? 0);
       result = finished;
       session = null;
@@ -330,6 +358,7 @@ export const Game = island(
 
           <div class="select__body">
             <ul class="songs" mix={[ref(readDevice)]}>
+              {customCard()}
               {SONGS.map((choice) => (
                 <li key={choice.id}>
                   <button
@@ -371,6 +400,13 @@ export const Game = island(
             <div class="select__side">
               {autoButton()}
               {midiButton()}
+              <a
+                class="toggle"
+                href={`${handle.props.base}/make`}
+                {...DOCUMENT_LINK}
+              >
+                曲をつくる
+              </a>
               <span class="select__hint">
                 スマホは横向き・パソコンは A〜L キーでも弾けます
               </span>
@@ -391,6 +427,78 @@ export const Game = island(
             </div>
           </footer>
         </section>
+      );
+    }
+
+    /**
+     * The card for the melody this page's URL carried, at the top of the list.
+     *
+     * Present only when there is one, which is why it is a card rather than a
+     * screen of its own: a link hands someone a melody, and the rest of the
+     * list is still there to play afterwards. A link that cannot be read shows
+     * the reason and a way into the editor with the same notation loaded, so
+     * the fix is one page away.
+     */
+    function customCard(): RemixNode {
+      if (customError !== null) {
+        return (
+          <li key="custom" class="songs__custom">
+            <div class="song song--broken">
+              <span class="song__head">
+                <span class="song__title">URLの楽譜が読めません</span>
+              </span>
+              <span class="song__credit">{customError}</span>
+              <span class="song__spacer"></span>
+              <a
+                class="song__state"
+                href={`${handle.props.base}/make${
+                  globalThis.location?.search ?? ""
+                }`}
+                {...DOCUMENT_LINK}
+              >
+                なおす
+              </a>
+            </div>
+          </li>
+        );
+      }
+
+      const mine = custom;
+      if (mine === null) return null;
+
+      return (
+        <li key="custom" class="songs__custom">
+          <button
+            type="button"
+            class="song song--custom"
+            title={mine.lead}
+            mix={[on("click", () => play(mine))]}
+          >
+            <span class="song__head">
+              <span class="song__title">{mine.title}</span>
+              <span class="song__badge">URLの曲</span>
+            </span>
+            <span class="song__credit">
+              {mine.bars}小節・♩={mine.bpm}
+            </span>
+            <span class="song__colors">
+              {scaleOf(mine).map((midi) => (
+                <span
+                  key={midi}
+                  class="dot"
+                  style={`background:${noteColor(midi)}`}
+                  title={solfa(midi)}
+                >
+                </span>
+              ))}
+            </span>
+            <span class="song__spacer"></span>
+            <span class="song__state">
+              <span aria-hidden="true">▷</span>
+              記録はのこりません
+            </span>
+          </button>
+        </li>
       );
     }
 
