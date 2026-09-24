@@ -11,9 +11,11 @@ import {
   isSharpened,
   noteColor,
   noteShape,
+  type Rest,
   solfa,
   staffStep,
 } from "./music.ts";
+import { REST_GLYPHS, type RestGlyph } from "./rests.ts";
 
 /** Where a note is in its life: waiting to be played, judged, or gone by. */
 export type NoteState = "pending" | "perfect" | "good" | "miss";
@@ -39,6 +41,8 @@ export interface StageView {
   /** How many beats of music are visible to the right of the judgement line. */
   lookahead: number;
   notes: readonly NoteView[];
+  /** Where the melody falls silent. Nothing to play, but something to read. */
+  rests: readonly Rest[];
   /** Which clef the staff is written in. */
   clef: ClefName;
   score: number;
@@ -136,6 +140,7 @@ export class Stage {
     drawStaffLines(context, metrics);
     drawBarLines(context, metrics, view);
     drawCountIn(context, metrics, view);
+    for (const rest of view.rests) drawRest(context, metrics, view, rest);
     for (const note of view.notes) drawNote(context, metrics, view, note);
     drawClef(context, metrics);
     drawHitLine(context, metrics);
@@ -261,13 +266,13 @@ function drawBarLines(
 }
 
 /** Outlines are parsed once; a `Path2D` is cheap to reuse and costly to rebuild each frame. */
-const CLEF_PATHS = new Map<string, Path2D>();
+const OUTLINES = new Map<string, Path2D>();
 
-function clefPath(clef: Clef): Path2D {
-  let path = CLEF_PATHS.get(clef.path);
+function outline(data: string): Path2D {
+  let path = OUTLINES.get(data);
   if (path === undefined) {
-    path = new Path2D(clef.path);
-    CLEF_PATHS.set(clef.path, path);
+    path = new Path2D(data);
+    OUTLINES.set(data, path);
   }
   return path;
 }
@@ -286,7 +291,61 @@ function drawClef(context: CanvasRenderingContext2D, metrics: Metrics) {
   context.translate(16, stepY(metrics, staffStep(clef.anchor)));
   context.scale(scale, -scale);
   context.fillStyle = "rgba(253,242,228,0.85)";
-  context.fill(clefPath(clef));
+  context.fill(outline(clef.path));
+  context.restore();
+}
+
+/**
+ * A rest, drawn from its outline.
+ *
+ * Dimmer than the notes on purpose. A rest is the one mark on this staff that asks for nothing:
+ * it has to be readable as part of the rhythm and never mistaken for a key coming up, and the
+ * colours are what the player's hand is reading, so a rest stays out of them.
+ */
+function drawRest(
+  context: CanvasRenderingContext2D,
+  metrics: Metrics,
+  view: StageView,
+  rest: Rest,
+) {
+  const x = beatX(metrics, view, rest.beat);
+  const unit = metrics.space;
+  if (x < metrics.clefRight - unit || x > metrics.width + unit * 3) return;
+
+  const glyph: RestGlyph = REST_GLYPHS[rest.value];
+  const scale = unit / glyph.unitsPerSpace;
+  const y = stepY(metrics, metrics.bottomStep + glyph.line);
+
+  // The same fade the notes take as they slide past the judgement line into the clef.
+  const runway = metrics.hitX - metrics.clefRight;
+  const alpha = runway > 0
+    ? Math.min(1, Math.max(0, (x - metrics.clefRight) / runway))
+    : 1;
+
+  context.save();
+  context.globalAlpha = alpha * (x < metrics.hitX ? 0.3 : 0.75);
+  context.fillStyle = TEXT;
+
+  context.save();
+  context.translate(x, y);
+  context.scale(scale, -scale);
+  context.fill(outline(glyph.path));
+  context.restore();
+
+  // Dots sit clear of the glyph, in the space above the middle line, as they do on a note.
+  const after = glyph.width / glyph.unitsPerSpace + 0.3;
+  for (let dot = 0; dot < rest.dots; dot += 1) {
+    context.beginPath();
+    context.arc(
+      x + unit * (after + dot * 0.35),
+      stepY(metrics, metrics.bottomStep + 5),
+      unit * 0.13,
+      0,
+      Math.PI * 2,
+    );
+    context.fill();
+  }
+
   context.restore();
 }
 

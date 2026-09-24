@@ -12,7 +12,7 @@
 import type { ClefName } from "./clefs.ts";
 import { keyRange } from "./keyboard.ts";
 import { readMml } from "./mml.ts";
-import type { Note } from "./music.ts";
+import { type Note, type Rest, silences } from "./music.ts";
 
 /** A playable melody. */
 export interface Song {
@@ -28,6 +28,8 @@ export interface Song {
   /** The clef the staff is drawn in. Treble unless a song sits too low for it. */
   clef: ClefName;
   notes: readonly Note[];
+  /** Where the melody falls silent, derived from the notes. The staff draws these. */
+  rests: readonly Rest[];
   bars: number;
   /** Range the keyboard has to cover. */
   lowest: number;
@@ -91,7 +93,16 @@ export function song(spec: SongSpec): Song {
   // narrowing the keys for everyone else.
   keyRange(lowest, highest);
 
-  return { ...rest, clef, bpm, notes, bars, lowest, highest };
+  return {
+    ...rest,
+    clef,
+    bpm,
+    notes,
+    rests: silences(notes, spec.beatsPerBar, bars),
+    bars,
+    lowest,
+    highest,
+  };
 }
 
 export const SONGS: readonly Song[] = [

@@ -269,6 +269,7 @@ export class Session {
       ),
       progress: Math.min(1, played),
       flash: this.#flash,
+      rests: this.song.rests,
       lowest: this.song.lowest,
       highest: this.song.highest,
     });

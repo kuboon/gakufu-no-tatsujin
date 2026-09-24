@@ -7,6 +7,8 @@
  * rhythm that scroll timing cannot show on its own.
  */
 
+import type { RestName } from "./rests.ts";
+
 /** Letter (0 = C … 6 = B) and accidental (0 or 1 semitone) for each pitch class. */
 const SPELLING: readonly (readonly [letter: number, sharp: number])[] = [
   [0, 0],
@@ -123,6 +125,9 @@ export interface NoteShape {
   dots: number;
 }
 
+/** What a dot, and then a second one, multiply a value by. */
+const DOTS = [1, 1.5, 1.75];
+
 /** Undotted note values, in beats (a beat is a quarter note). */
 const VALUES: readonly (readonly [
   beats: number,
@@ -144,7 +149,6 @@ const VALUES: readonly (readonly [
  * multipliers to try are 1, 1.5 and 1.75. Beyond two dots is not notation anyone reads at speed.
  */
 export function noteShape(beats: number): NoteShape {
-  const DOTS = [1, 1.5, 1.75];
   for (const [value, filled, stem, flags] of VALUES) {
     for (const [dots, multiplier] of DOTS.entries()) {
       if (Math.abs(beats - value * multiplier) < 1e-6) {
@@ -162,4 +166,156 @@ export interface Note {
   beat: number;
   /** Length, in beats. */
   beats: number;
+}
+
+/** A stretch of a melody where nothing sounds, written as one rest. */
+export interface Rest {
+  beat: number;
+  beats: number;
+  value: RestName;
+  /** 0, 1 or 2, as on a note. */
+  dots: number;
+}
+
+/**
+ * How a length of silence is written.
+ *
+ * The same table the note heads use, because a rest is the same durations with a different mark.
+ *
+ * @throws When no rest of that length can be written
+ */
+export function restShape(beats: number): { value: RestName; dots: number } {
+  for (const [index, [value]] of VALUES.entries()) {
+    for (const [dots, multiplier] of DOTS.entries()) {
+      if (Math.abs(beats - value * multiplier) < 1e-6) {
+        return { value: REST_NAMES[index], dots };
+      }
+    }
+  }
+  throw new Error(`${beats}拍は休符で書けない長さです。`);
+}
+
+/** The rest each row of {@link VALUES} is written with, in the same order. */
+const REST_NAMES: readonly RestName[] = [
+  "whole",
+  "half",
+  "quarter",
+  "eighth",
+  "sixteenth",
+];
+
+/**
+ * Where a melody falls silent, and how each silence is written.
+ *
+ * Derived from the notes rather than read out of the notation, which is what makes it right for a
+ * melody written in several parts: what the player sees as "nothing to play" is the stretch where
+ * *no* part is sounding, and a rest written into one voice while another holds a note is not that.
+ *
+ * Each silence is then cut at the bar lines and spelled out, because a rest belongs to one bar and
+ * a reader takes its length from where it sits. A bar with nothing in it at all is one whole rest,
+ * whatever the time signature — that is the convention, and it is what the printed scores this
+ * game is transcribed from do.
+ *
+ * @param notes The melody, in any order
+ * @param beatsPerBar The time signature's beats
+ * @param bars How many bars the melody covers
+ */
+export function silences(
+  notes: readonly Note[],
+  beatsPerBar: number,
+  bars: number,
+): Rest[] {
+  const sounding = merged(notes);
+  const rests: Rest[] = [];
+
+  for (let bar = 0; bar < bars; bar += 1) {
+    const start = bar * beatsPerBar;
+    for (const [from, to] of gaps(sounding, start, start + beatsPerBar)) {
+      if (from === start && Math.abs(to - start - beatsPerBar) < 1e-6) {
+        rests.push({
+          beat: start,
+          beats: beatsPerBar,
+          value: "whole",
+          dots: 0,
+        });
+        continue;
+      }
+      spell(from - start, to - start, rests, start);
+    }
+  }
+
+  return rests;
+}
+
+/** The stretches where at least one note is sounding, in order and without overlaps. */
+function merged(notes: readonly Note[]): [from: number, to: number][] {
+  const spans = notes
+    .map((note): [number, number] => [note.beat, note.beat + note.beats])
+    .sort((a, b) => a[0] - b[0]);
+
+  const out: [number, number][] = [];
+  for (const span of spans) {
+    const last = out[out.length - 1];
+    if (last !== undefined && span[0] <= last[1] + 1e-9) {
+      last[1] = Math.max(last[1], span[1]);
+    } else {
+      out.push([...span]);
+    }
+  }
+  return out;
+}
+
+/** What is left of `from`–`to` once the sounding stretches are taken out of it. */
+function gaps(
+  sounding: readonly (readonly [number, number])[],
+  from: number,
+  to: number,
+): [number, number][] {
+  const out: [number, number][] = [];
+  let at = from;
+  for (const [start, end] of sounding) {
+    if (end <= at + 1e-9) continue;
+    if (start >= to - 1e-9) break;
+    if (start > at + 1e-9) out.push([at, Math.min(start, to)]);
+    at = Math.max(at, end);
+    if (at >= to - 1e-9) break;
+  }
+  if (at < to - 1e-9) out.push([at, to]);
+  return out;
+}
+
+/**
+ * Writes one stretch of silence inside a bar as rests, longest first.
+ *
+ * A rest may only start where its own length divides the bar — a half rest on the second beat of
+ * four reads as spanning the bar's middle, which is exactly what notation avoids. Taking the
+ * longest value that both fits and lands on its own multiple is the whole rule, and it is why a
+ * bar that rests for three beats after one note comes out as a quarter and then a half.
+ *
+ * @param from Beats from the start of the bar
+ * @param to Beats from the start of the bar
+ * @param into The list to append to
+ * @param bar The bar's own start, in beats from the top of the song
+ */
+function spell(
+  from: number,
+  to: number,
+  into: Rest[],
+  bar: number,
+): void {
+  const WRITABLE = [4, 3, 2, 1.5, 1, 0.75, 0.5, 0.375, 0.25];
+  let at = from;
+
+  // Bounded rather than `while`: a length the table cannot reach must end the loop rather than
+  // spin on it, and the leftover is too short to see.
+  for (let guard = 0; guard < 64 && to - at > 1e-6; guard += 1) {
+    const left = to - at;
+    const value = WRITABLE.find((one) =>
+      one <= left + 1e-9 && Math.abs(at % one) < 1e-9
+    ) ?? WRITABLE.find((one) => one <= left + 1e-9);
+    if (value === undefined) return;
+
+    into.push({ beat: bar + at, beats: value, ...restShape(value) });
+    at += value;
+  }
 }
