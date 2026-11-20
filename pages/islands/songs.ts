@@ -250,6 +250,23 @@ export const SONGS: readonly Song[] = [
     `,
   }),
   song({
+    id: "joy",
+    title: "喜びの歌",
+    credit: "L. v. ベートーヴェン 作曲（交響曲第9番より）",
+    lead: "となりの音へ一歩ずつ。12小節めだけ、加線の下のソへ跳ぶ。",
+    difficulty: 2,
+    beatsPerBar: 4,
+    // The theme as it is sung, moved from D major to C so the hands stay on the white keys.
+    // The orchestra enters the last line a beat early, tied over the bar; the sung version
+    // waits for the downbeat, and so does this.
+    mml: `
+      t120 l4 o4 | e e f g | g f e d | c c d e | e. d8 d2
+      | e e f g | g f e d | c c d e | d. c8 c2
+      | d d e c | d e8 f8 e c | d e8 f8 e d | c d <g2
+      | >e e f g | g f e d | c c d e | d. c8 c2
+    `,
+  }),
+  song({
     id: "jingle",
     title: "ジングルベル",
     credit: "J. L. ピアポント 作曲",
