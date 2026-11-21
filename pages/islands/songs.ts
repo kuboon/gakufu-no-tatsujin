@@ -126,9 +126,13 @@ export const SONGS: readonly Song[] = [
     lead: "ソから下りてくる。ならんだ音をそのまま読む練習に。",
     difficulty: 1,
     beatsPerBar: 4,
+    // As the Japanese song is sung, which repeats its second line to end on ミ. The German
+    // original holds some of these notes as half notes instead, and ends on ド.
     mml: `
       t108 l4 o4 | g e e2 | f d d2 | c d e f | g g g2
-      | g e e2 | f d d2 | c e g g | e1
+      | g e e e | f d d d | c e g g | e e e2
+      | d d d d | d e f2 | e e e e | e f g2
+      | g e e e | f d d d | c e g g | e e e2
     `,
   }),
   song({
