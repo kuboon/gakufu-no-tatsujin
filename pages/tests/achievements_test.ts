@@ -17,6 +17,7 @@ function played(over: Partial<Result> = {}): Result {
   return {
     song,
     usedAuto: false,
+    usedWait: false,
     score: 1000,
     maxCombo: song.notes.length,
     perfect: song.notes.length,
@@ -139,6 +140,26 @@ Deno.test("the score achievement waits for a personal best", () => {
 
 Deno.test("the demo player earns listening, and nothing else", () => {
   assertEquals(keys(played({ usedAuto: true })), ["listen_through"]);
+});
+
+Deno.test("practice mode earns nothing", () => {
+  assertEquals(keys(played({ usedWait: true })), []);
+});
+
+Deno.test("the demo player still earns listening in practice mode", () => {
+  assertEquals(keys(played({ usedAuto: true, usedWait: true })), [
+    "listen_through",
+  ]);
+});
+
+Deno.test("practice mode leaves no clear and no score behind", () => {
+  const after = recordProgress(
+    played({ song: songById("tulip"), score: 9999, usedWait: true }),
+    NOTHING,
+  );
+  assertEquals(after.cleared, []);
+  assertEquals(after.bests, { tulip: 0 });
+  assertEquals(after.best, 0);
 });
 
 Deno.test("progress keeps a best per song, and the achievements earned", () => {

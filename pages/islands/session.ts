@@ -36,6 +36,8 @@ export interface Result {
   song: Song;
   /** Whether the demo player was on at any point, which rules out achievements. */
   usedAuto: boolean;
+  /** Whether practice mode held the music for the player at any point. Rules them out too. */
+  usedWait: boolean;
   score: number;
   maxCombo: number;
   perfect: number;
@@ -76,6 +78,13 @@ export class Session {
   #frame = 0;
   #auto = false;
   #autoUsed = false;
+  #wait = false;
+  #waitUsed = false;
+  /**
+   * The moment on the game clock the music is held at, while practice mode waits for the right key.
+   * Null while the music runs.
+   */
+  #holdAt: number | null = null;
   /** When the last note stops sounding, on the game clock. A chord makes this the later of its
    * notes, which is not always the one the list ends with. */
   #end = 0;
@@ -121,6 +130,20 @@ export class Session {
     this.#auto = on;
     // Sticky: turning it back off does not make the notes you skipped yours.
     if (on) this.#autoUsed = true;
+  }
+
+  /**
+   * Practice mode: when a note reaches the judgement line, the music stops there and waits for its
+   * key, however long that takes. Nothing is ever missed, so nothing it plays is a record.
+   */
+  get wait(): boolean {
+    return this.#wait;
+  }
+
+  set wait(on: boolean) {
+    this.#wait = on;
+    // Sticky for the same reason as the demo player.
+    if (on) this.#waitUsed = true;
   }
 
   /** Takes over the canvas and starts the clock. Runs until the signal aborts. */
@@ -169,11 +192,13 @@ export class Session {
     this.#keys.get(midi)?.classList.add("is-down");
 
     const now = this.#tones.now();
-    const target = this.#nearest(midi, now);
+    // While the music is held, the note it waits on is due right now, however late the press.
+    const clock = this.#holdAt ?? now;
+    const target = this.#nearest(midi, clock);
     this.#tones.note(midi, now, (target?.beats ?? 1) * this.#secondsPerBeat);
 
     if (target === undefined) return;
-    const off = Math.abs(target.at - now);
+    const off = Math.abs(target.at - clock);
     this.#judge(target, off <= PERFECT_SECONDS ? "perfect" : "good", now);
   }
 
@@ -190,11 +215,47 @@ export class Session {
       this.#pausedAt = this.#tones.now();
     } else if (!paused && this.#pausedAt !== null) {
       const stopped = this.#tones.now() - this.#pausedAt;
-      this.#origin += stopped;
-      this.#end += stopped;
-      for (const note of this.#notes) note.at += stopped;
+      this.#shift(stopped);
+      // A note practice mode was waiting on has moved with the rest, so the hold moves with it.
+      if (this.#holdAt !== null) this.#holdAt += stopped;
       this.#pausedAt = null;
     }
+  }
+
+  /** Moves the rest of the song later by this many seconds, after the clock has stood still. */
+  #shift(seconds: number): void {
+    this.#origin += seconds;
+    this.#end += seconds;
+    for (const note of this.#notes) note.at += seconds;
+  }
+
+  /**
+   * Holds or lets go of the music, for practice mode.
+   *
+   * The music is held at the first note still waiting once its moment arrives, and let go once
+   * every note due at that moment has been played — all of a chord, not just one of its notes.
+   * Letting go moves the rest of the song later by however long the wait was, so the music picks
+   * up exactly where it stopped.
+   *
+   * @returns The moment on the game clock the music stands at
+   */
+  #hold(now: number): number {
+    let next = Infinity;
+    for (const note of this.#notes) {
+      if (note.state === "pending") next = Math.min(next, note.at);
+    }
+
+    if (this.#holdAt !== null && (!this.#wait || next > this.#holdAt)) {
+      const waited = now - this.#holdAt;
+      this.#shift(waited);
+      // The next note moved with the rest, and has to be compared where it is now.
+      next += waited;
+      this.#holdAt = null;
+    }
+    if (this.#holdAt === null && this.#wait && next <= now) {
+      this.#holdAt = next;
+    }
+    return this.#holdAt ?? now;
   }
 
   /** Gives up on the play-through. */
@@ -235,22 +296,23 @@ export class Session {
     const stage = this.#stage;
     if (stage === null) return;
 
+    // Two clocks. `now` keeps running, and paces what only animates — a judgement popping, the
+    // flash of a word. `clock` is where the music stands, which practice mode can hold still.
     const now = this.#pausedAt ?? this.#tones.now();
-    const beat = (now - this.#origin) / this.#secondsPerBeat;
+    // The demo player goes first, so it plays a note before practice mode can wait on it.
+    this.#autoPlay(this.#holdAt ?? now, now);
+    const clock = this.#hold(now);
+    const beat = (clock - this.#origin) / this.#secondsPerBeat;
 
-    this.#countIn(now, beat);
+    this.#countIn(clock, beat);
 
     for (const note of this.#notes) {
-      if (note.state !== "pending") continue;
-      if (this.#auto && note.at <= now) {
-        this.#tones.note(note.midi, note.at, note.beats * this.#secondsPerBeat);
-        this.#judge(note, "perfect", now);
-      } else if (now - note.at > MISS_SECONDS) {
+      if (note.state === "pending" && clock - note.at > MISS_SECONDS) {
         this.#judge(note, "miss", now);
       }
     }
 
-    this.#cue(now);
+    this.#cue(clock);
 
     const played = Math.max(0, beat) / (this.song.bars * this.song.beatsPerBar);
     stage.draw({
@@ -274,9 +336,23 @@ export class Session {
       highest: this.song.highest,
     });
 
-    if (this.#running && now > this.#end + TAIL_SECONDS) {
+    if (this.#running && clock > this.#end + TAIL_SECONDS) {
       this.stop();
       this.#onFinish(this.#result());
+    }
+  }
+
+  /** Plays every note that is due, while the demo player is on. */
+  #autoPlay(clock: number, now: number): void {
+    if (!this.#auto) return;
+    for (const note of this.#notes) {
+      if (note.state !== "pending" || note.at > clock) continue;
+      this.#tones.note(
+        note.midi,
+        Math.max(note.at, now),
+        note.beats * this.#secondsPerBeat,
+      );
+      this.#judge(note, "perfect", now);
     }
   }
 
@@ -323,6 +399,7 @@ export class Session {
     return {
       song: this.song,
       usedAuto: this.#autoUsed,
+      usedWait: this.#waitUsed,
       score: this.#score,
       maxCombo: this.#maxCombo,
       perfect: this.#counts.perfect,
