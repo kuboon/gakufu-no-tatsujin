@@ -158,6 +158,9 @@ export function earned(result: Result, before: Progress): Earned[] {
   if (result.song.custom === true) return [];
   // The demo player is for listening, so it is never evidence of playing.
   if (result.usedAuto) return [{ key: "listen_through" }];
+  // Practice mode waits for every note, so a run through it shows the keys were
+  // found, not that the song was played in time.
+  if (result.usedWait) return [];
 
   const cleared = new Set([...before.cleared, result.song.id]);
   const keys: string[] = [];
@@ -225,10 +228,12 @@ export function recordProgress(
   // best. It is not one of the songs, so there is nothing here to say about it.
   if (result.song.custom === true) return previous;
 
+  // Neither the demo player nor practice mode is the song played in time.
+  const counts = !result.usedAuto && !result.usedWait;
   const cleared = new Set(previous.cleared);
-  if (!result.usedAuto) cleared.add(result.song.id);
+  if (counts) cleared.add(result.song.id);
 
-  const score = result.usedAuto ? 0 : result.score;
+  const score = counts ? result.score : 0;
   const awards = new Set(previous.awards);
   // Only keys the manifest declares, so trimming the achievement list can
   // never leave a phantom behind in the count.

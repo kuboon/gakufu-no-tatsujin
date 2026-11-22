@@ -69,6 +69,9 @@ export const Game = island(
     let result: Result | null = null;
     let session: Session | null = null;
     let auto = false;
+    // Practice mode, which holds the music at each note until its key is played. Kept between
+    // songs, like the demo player, so a child who needs it does not have to ask for it each time.
+    let wait = false;
     let reported: Reported | null = null;
     // Whether the run on screen beat this device's record for that song.
     let beatBest = false;
@@ -166,6 +169,7 @@ export const Game = island(
       session?.stop();
       session = new Session({ song, tones, onFinish: finish });
       session.auto = auto;
+      session.wait = wait;
       result = null;
       reported = null;
       phase = "play";
@@ -176,7 +180,8 @@ export const Game = island(
       // Read before anything is written: whether this is a personal best is a
       // question about the record that stood when the song started.
       const before = progress ?? readProgress();
-      beatBest = !finished.usedAuto && finished.song.custom !== true &&
+      beatBest = !finished.usedAuto && !finished.usedWait &&
+        finished.song.custom !== true &&
         finished.score > (before.bests[finished.song.id] ?? 0);
       result = finished;
       session = null;
@@ -214,6 +219,12 @@ export const Game = island(
     function toggleAuto(): void {
       auto = !auto;
       if (session !== null) session.auto = auto;
+      void handle.update();
+    }
+
+    function toggleWait(): void {
+      wait = !wait;
+      if (session !== null) session.wait = wait;
       void handle.update();
     }
 
@@ -270,6 +281,20 @@ export const Game = island(
           mix={[on("click", toggleAuto)]}
         >
           おてほん
+        </button>
+      );
+    }
+
+    function waitButton(): RemixNode {
+      return (
+        <button
+          type="button"
+          class={wait ? "toggle is-on" : "toggle"}
+          aria-pressed={wait ? "true" : "false"}
+          title="正しい鍵をおすまで、音符が判定線で まっています"
+          mix={[on("click", toggleWait)]}
+        >
+          まってね
         </button>
       );
     }
@@ -398,6 +423,7 @@ export const Game = island(
 
           <footer class="select__foot">
             <div class="select__side">
+              {waitButton()}
               {autoButton()}
               {midiButton()}
               <a
@@ -530,6 +556,7 @@ export const Game = island(
           <div class="stage">
             <canvas class="stage__canvas" mix={[ref(attachStage)]}></canvas>
             <div class="stage__bar">
+              {waitButton()}
               {autoButton()}
               <button
                 type="button"
@@ -756,6 +783,9 @@ function nextSong(current: Song): Song {
 function verdict(result: Result): string {
   if (result.usedAuto) {
     return "おてほんで さいせいしました。じぶんで弾くと記録がのこります。";
+  }
+  if (result.usedWait) {
+    return "まってねモードで 最後まで弾けました。つぎは まってね なしで。";
   }
   if (result.miss === 0 && result.good === 0) return "全部バッチリ。文句なし。";
   if (result.miss === 0) {
