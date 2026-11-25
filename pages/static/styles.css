@@ -247,10 +247,29 @@ body.bare {
   height: 50%;
 }
 
+.stage__staves {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
 .stage__canvas {
   display: block;
+  flex: 1 1 0;
   width: 100%;
+  min-height: 0;
+}
+
+/* Two hands: no keyboard, so the two staves share the whole screen, the
+   right hand's on top as on a printed grand staff. */
+
+.play--both .stage {
+  flex: 1 1 100%;
   height: 100%;
+}
+
+.play--both .stage__canvas + .stage__canvas {
+  border-top: 1px solid var(--line);
 }
 
 /* The score, the combo and the bar count are painted into the canvas with the
@@ -919,6 +938,12 @@ body.bare {
 /* --- a melody the URL carried --- */
 
 /* Full width at the top of the list: it is the one card the visitor came for. */
+
+.songs__none {
+  grid-column: 1 / -1;
+  padding: 1.2rem 0.4rem;
+  color: var(--ink-soft);
+}
 
 .songs__custom {
   grid-column: 1 / -1;

@@ -56,6 +56,13 @@ export interface Melody {
    * melody back by the difference, which is where the notes belong on a staff anyway.
    */
   pickup: number;
+  /**
+   * The same notes, part by part, in the order the parts were written.
+   *
+   * Merged is what a single staff plays. Kept apart, they are what lets two hands be written as
+   * parts of one song and still be drawn on staves of their own.
+   */
+  voices: Note[][];
 }
 
 /**
@@ -108,17 +115,22 @@ export function readMml(mml: string, beatsPerBar: number): Melody {
 
   // In time order, and a chord's notes low to high: the game reads the last note of the list to
   // know when the song is over, and draws them in the order it is given.
-  const notes = parts
-    .flatMap((part) => part.notes)
-    .map((note) => ({ ...note, beat: note.beat + pickup }))
-    .sort((a, b) => a.beat - b.beat || a.midi - b.midi);
+  const voices = parts.map((part) =>
+    inOrder(part.notes.map((note) => ({ ...note, beat: note.beat + pickup })))
+  );
 
   return {
-    notes,
+    notes: inOrder(voices.flat()),
     bars: Math.ceil(total / beatsPerBar - 1e-9),
     bpm: tempoOf(parts),
     pickup,
+    voices,
   };
+}
+
+/** In time order, and a chord's notes low to high. */
+export function inOrder(notes: Note[]): Note[] {
+  return notes.sort((a, b) => a.beat - b.beat || a.midi - b.midi);
 }
 
 /**

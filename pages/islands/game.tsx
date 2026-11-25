@@ -30,7 +30,7 @@ import {
 } from "./keyboard.ts";
 import { listenMidi, midiSupported } from "./midi.ts";
 import { glowColor, keyColor, noteColor, solfa } from "./music.ts";
-import { type Song, SONGS } from "./songs.ts";
+import { BOTH_SONGS, type Song, SONGS } from "./songs.ts";
 import type { Result } from "./session.ts";
 import { Session } from "./session.ts";
 
@@ -72,6 +72,9 @@ export const Game = island(
     // Practice mode, which holds the music at each note until its key is played. Kept between
     // songs, like the demo player, so a child who needs it does not have to ask for it each time.
     let wait = false;
+    // Two-hand mode: the songs with a left hand written for them, on two staves and no keyboard.
+    // Two hands need a real keyboard under them, so this is offered only alongside MIDI.
+    let both = false;
     let reported: Reported | null = null;
     // Whether the run on screen beat this device's record for that song.
     let beatBest = false;
@@ -157,6 +160,11 @@ export const Game = island(
       void handle.update();
     }
 
+    /** Whether the song on screen is drawn on two staves, with no keyboard under them. */
+    function twoStaves(): boolean {
+      return (song.staves?.length ?? 1) > 1;
+    }
+
     function keys(): KeyCap[] {
       const { from, to } = keyRange(song.lowest, song.highest);
       return keyboardLayout(from, to);
@@ -222,6 +230,14 @@ export const Game = island(
       void handle.update();
     }
 
+    function toggleBoth(): void {
+      both = !both;
+      // The mode is played on a MIDI keyboard and nothing else, so asking for one is part of
+      // turning it on rather than a second thing to remember.
+      if (both) void connectMidi();
+      void handle.update();
+    }
+
     function toggleWait(): void {
       wait = !wait;
       if (session !== null) session.wait = wait;
@@ -250,9 +266,11 @@ export const Game = island(
     function attachStage(node: Element, signal: AbortSignal): void {
       const current = session;
       if (current === null) return;
-      current.attach(node as HTMLCanvasElement, signal);
+      current.attach([...node.querySelectorAll("canvas")], signal);
 
-      const typed = typingMap(keys());
+      // Two hands are played on MIDI only: there is no keyboard on screen for typing to stand in
+      // for, and two hands' worth of keys would not fit on the letters anyway.
+      const typed = twoStaves() ? new Map<string, number>() : typingMap(keys());
       globalThis.addEventListener("keydown", (event) => {
         if (event.repeat || event.metaKey || event.ctrlKey) return;
         if (event.key === "Escape") {
@@ -281,6 +299,25 @@ export const Game = island(
           mix={[on("click", toggleAuto)]}
         >
           おてほん
+        </button>
+      );
+    }
+
+    /**
+     * Two-hand mode's switch. Offered only where the browser has Web MIDI, because the mode is
+     * played on a MIDI keyboard and nothing else.
+     */
+    function bothButton(): RemixNode {
+      if (midi === "unknown" || midi === "unsupported") return null;
+      return (
+        <button
+          type="button"
+          class={both ? "toggle is-on" : "toggle"}
+          aria-pressed={both ? "true" : "false"}
+          title="五線譜を右手と左手の2段にします。MIDIキーボードで弾きます"
+          mix={[on("click", toggleBoth)]}
+        >
+          両手
         </button>
       );
     }
@@ -383,8 +420,15 @@ export const Game = island(
 
           <div class="select__body">
             <ul class="songs" mix={[ref(readDevice)]}>
-              {customCard()}
-              {SONGS.map((choice) => (
+              {both ? null : customCard()}
+              {both && BOTH_SONGS.length === 0
+                ? (
+                  <li key="none" class="songs__none">
+                    両手で弾ける曲は、まだありません。
+                  </li>
+                )
+                : null}
+              {(both ? BOTH_SONGS : SONGS).map((choice) => (
                 <li key={choice.id}>
                   <button
                     type="button"
@@ -426,6 +470,7 @@ export const Game = island(
               {waitButton()}
               {autoButton()}
               {midiButton()}
+              {bothButton()}
               <a
                 class="toggle"
                 href={`${handle.props.base}/make`}
@@ -434,7 +479,9 @@ export const Game = island(
                 曲をつくる
               </a>
               <span class="select__hint">
-                スマホは横向き・パソコンは A〜L キーでも弾けます
+                {both
+                  ? "両手は MIDIキーボードで弾きます"
+                  : "スマホは横向き・パソコンは A〜L キーでも弾けます"}
               </span>
             </div>
             <div class="select__side">
@@ -551,10 +598,18 @@ export const Game = island(
     }
 
     function playScreen(): RemixNode {
+      const staves = session?.staves ?? 1;
       return (
-        <section class="play">
+        <section class={staves > 1 ? "play play--both" : "play"}>
           <div class="stage">
-            <canvas class="stage__canvas" mix={[ref(attachStage)]}></canvas>
+            <div class="stage__staves" mix={[ref(attachStage)]}>
+              {Array.from(
+                { length: staves },
+                (_, index) => (
+                  <canvas key={index} class="stage__canvas"></canvas>
+                ),
+              )}
+            </div>
             <div class="stage__bar">
               {waitButton()}
               {autoButton()}
@@ -568,36 +623,42 @@ export const Game = island(
               </button>
             </div>
           </div>
-          <div class="keyboard">
-            {keys().map((key) => (
-              <button
-                key={key.midi}
-                type="button"
-                class={key.black ? "key key--black" : "key"}
-                style={`left:${percent(key.left)};width:${
-                  percent(key.width)
-                };--face:${keyColor(key.midi)};--cue:${
-                  noteColor(key.midi)
-                };--glow:${glowColor(key.midi)}`}
-                aria-label={solfa(key.midi)}
-                mix={[
-                  ref((node, signal) =>
-                    session?.bindKey(key.midi, node as HTMLElement, signal)
-                  ),
-                  on("pointerdown", (event) => {
-                    event.preventDefault();
-                    session?.press(key.midi);
-                  }),
-                  on("pointerup", () => session?.release(key.midi)),
-                  on("pointercancel", () => session?.release(key.midi)),
-                  on("pointerleave", () => session?.release(key.midi)),
-                ]}
-              >
-                <span class="key__label">{solfa(key.midi)}</span>
-              </button>
-            ))}
-          </div>
+          {staves > 1 ? null : keyboard()}
         </section>
+      );
+    }
+
+    function keyboard(): RemixNode {
+      return (
+        <div class="keyboard">
+          {keys().map((key) => (
+            <button
+              key={key.midi}
+              type="button"
+              class={key.black ? "key key--black" : "key"}
+              style={`left:${percent(key.left)};width:${
+                percent(key.width)
+              };--face:${keyColor(key.midi)};--cue:${
+                noteColor(key.midi)
+              };--glow:${glowColor(key.midi)}`}
+              aria-label={solfa(key.midi)}
+              mix={[
+                ref((node, signal) =>
+                  session?.bindKey(key.midi, node as HTMLElement, signal)
+                ),
+                on("pointerdown", (event) => {
+                  event.preventDefault();
+                  session?.press(key.midi);
+                }),
+                on("pointerup", () => session?.release(key.midi)),
+                on("pointercancel", () => session?.release(key.midi)),
+                on("pointerleave", () => session?.release(key.midi)),
+              ]}
+            >
+              <span class="key__label">{solfa(key.midi)}</span>
+            </button>
+          ))}
+        </div>
       );
     }
 
@@ -773,10 +834,11 @@ function scaleOf(song: Song): number[] {
   );
 }
 
-/** The song after this one, wrapping round at the end of the list. */
+/** The song after this one in its own list, wrapping round at the end. */
 function nextSong(current: Song): Song {
-  const index = SONGS.findIndex((song) => song.id === current.id);
-  return SONGS[(index + 1) % SONGS.length];
+  const list = current.staves === undefined ? SONGS : BOTH_SONGS;
+  const index = list.findIndex((song) => song.id === current.id);
+  return list[(index + 1) % list.length] ?? current;
 }
 
 /** One line on what the run was, so the four counts read as detail. */
