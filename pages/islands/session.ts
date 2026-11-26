@@ -7,7 +7,7 @@
  */
 
 import type { Tones } from "./audio.ts";
-import type { Song } from "./songs.ts";
+import type { Song, Staff } from "./songs.ts";
 import { Stage } from "./staff.ts";
 import type { NoteState, NoteView } from "./staff.ts";
 
@@ -59,14 +59,22 @@ export interface SessionOptions {
   onFinish: (result: Result) => void;
 }
 
+/** A staff on screen and the notes drawn on it. */
+interface Lane {
+  staff: Staff;
+  notes: PlayNote[];
+  stage: Stage | null;
+}
+
 /** One play-through of one song. */
 export class Session {
   readonly song: Song;
   #tones: Tones;
   #onFinish: (result: Result) => void;
 
+  /** Every note of the song, whichever staff it is drawn on: they are judged all together. */
   #notes: PlayNote[];
-  #stage: Stage | null = null;
+  #lanes: Lane[];
   #keys = new Map<number, HTMLElement>();
   #cued = new Set<number>();
   #held = new Set<number>();
@@ -106,14 +114,32 @@ export class Session {
     this.#tones = options.tones;
     this.#onFinish = options.onFinish;
     this.#secondsPerBeat = 60 / options.song.bpm;
-    this.#notes = options.song.notes.map((note) => ({
-      midi: note.midi,
-      beat: note.beat,
-      beats: note.beats,
-      state: "pending",
-      judgedAt: 0,
-      at: 0,
+    const song = options.song;
+    const staves: readonly Staff[] = song.staves ?? [{
+      clef: song.clef,
+      notes: song.notes,
+      rests: song.rests,
+      lowest: song.lowest,
+      highest: song.highest,
+    }];
+    this.#lanes = staves.map((staff) => ({
+      staff,
+      notes: staff.notes.map((note) => ({
+        midi: note.midi,
+        beat: note.beat,
+        beats: note.beats,
+        state: "pending",
+        judgedAt: 0,
+        at: 0,
+      })),
+      stage: null,
     }));
+    this.#notes = this.#lanes.flatMap((lane) => lane.notes);
+  }
+
+  /** How many staves the song is drawn on, so the page can give each a canvas. */
+  get staves(): number {
+    return this.#lanes.length;
   }
 
   /** How many beats of music are visible ahead of the judgement line. */
@@ -146,10 +172,16 @@ export class Session {
     if (on) this.#waitUsed = true;
   }
 
-  /** Takes over the canvas and starts the clock. Runs until the signal aborts. */
-  attach(canvas: HTMLCanvasElement, signal: AbortSignal): void {
-    this.#stage = new Stage(canvas);
-    this.#stage.fit();
+  /**
+   * Takes over the canvases, one per staff from the top, and starts the clock. Runs until the
+   * signal aborts.
+   */
+  attach(canvases: readonly HTMLCanvasElement[], signal: AbortSignal): void {
+    this.#lanes.forEach((lane, index) => {
+      const canvas = canvases[index];
+      lane.stage = canvas === undefined ? null : new Stage(canvas);
+      lane.stage?.fit();
+    });
 
     // The first note starts one count-in bar after the music has scrolled in from the right edge.
     const leadIn = (this.lookahead + COUNT_IN_BEATS) * this.#secondsPerBeat;
@@ -170,7 +202,9 @@ export class Session {
     };
     this.#frame = requestAnimationFrame(step);
 
-    globalThis.addEventListener("resize", () => this.#stage?.fit(), { signal });
+    globalThis.addEventListener("resize", () => {
+      for (const lane of this.#lanes) lane.stage?.fit();
+    }, { signal });
     signal.addEventListener("abort", () => {
       cancelAnimationFrame(this.#frame);
       this.#running = false;
@@ -293,8 +327,7 @@ export class Session {
   }
 
   #tick(): void {
-    const stage = this.#stage;
-    if (stage === null) return;
+    if (this.#lanes[0]?.stage == null) return;
 
     // Two clocks. `now` keeps running, and paces what only animates — a judgement popping, the
     // flash of a word. `clock` is where the music stands, which practice mode can hold still.
@@ -315,25 +348,28 @@ export class Session {
     this.#cue(clock);
 
     const played = Math.max(0, beat) / (this.song.bars * this.song.beatsPerBar);
-    stage.draw({
-      now,
-      beat,
-      beatsPerBar: this.song.beatsPerBar,
-      bars: this.song.bars,
-      lookahead: this.lookahead,
-      notes: this.#notes,
-      clef: this.song.clef,
-      score: this.#score,
-      combo: this.#combo,
-      bar: Math.min(
-        this.song.bars,
-        Math.max(1, Math.floor(beat / this.song.beatsPerBar) + 1),
-      ),
-      progress: Math.min(1, played),
-      flash: this.#flash,
-      rests: this.song.rests,
-      lowest: this.song.lowest,
-      highest: this.song.highest,
+    this.#lanes.forEach((lane, index) => {
+      lane.stage?.draw({
+        now,
+        beat,
+        beatsPerBar: this.song.beatsPerBar,
+        bars: this.song.bars,
+        lookahead: this.lookahead,
+        notes: lane.notes,
+        clef: lane.staff.clef,
+        score: this.#score,
+        combo: this.#combo,
+        bar: Math.min(
+          this.song.bars,
+          Math.max(1, Math.floor(beat / this.song.beatsPerBar) + 1),
+        ),
+        progress: Math.min(1, played),
+        flash: this.#flash,
+        rests: lane.staff.rests,
+        lowest: lane.staff.lowest,
+        highest: lane.staff.highest,
+        hud: index === 0,
+      });
     });
 
     if (this.#running && clock > this.#end + TAIL_SECONDS) {

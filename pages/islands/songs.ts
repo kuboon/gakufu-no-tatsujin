@@ -11,8 +11,17 @@
 
 import type { ClefName } from "./clefs.ts";
 import { keyRange } from "./keyboard.ts";
-import { readMml } from "./mml.ts";
+import { inOrder, readMml } from "./mml.ts";
 import { type Note, type Rest, silences } from "./music.ts";
+
+/** One staff's worth of a song: the notes one hand reads, in the clef it reads them in. */
+export interface Staff {
+  clef: ClefName;
+  notes: readonly Note[];
+  rests: readonly Rest[];
+  lowest: number;
+  highest: number;
+}
 
 /** A playable melody. */
 export interface Song {
@@ -41,6 +50,18 @@ export interface Song {
    * a rank earned on it would be a rank they handed themselves.
    */
   custom?: boolean;
+  /**
+   * The song for two hands, when it has a left-hand part written for it.
+   *
+   * A song of its own rather than a setting on this one: its id is different, so a score for two
+   * hands is kept apart from the one for the melody alone, and its notes are both hands together.
+   */
+  both?: Song;
+  /**
+   * Set on the two-hand song only: the right hand's staff, then the left's. A song without it is
+   * one staff, in {@link Song.clef}.
+   */
+  staves?: readonly Staff[];
 }
 
 export interface SongSpec {
@@ -53,8 +74,19 @@ export interface SongSpec {
   beatsPerBar: number;
   clef?: ClefName;
   mml: string;
+  /**
+   * The left hand, for two-hand mode, drawn on a staff in the bass clef under the melody.
+   *
+   * Written like {@link SongSpec.mml}, with the same bar lines: the two are read as parts of one
+   * song, so a left hand a beat longer or with a bar line out of step fails the build. It can have
+   * parts of its own, separated by `,`, for chords. Leave the tempo off, or write the melody's.
+   */
+  left?: string;
   custom?: boolean;
 }
+
+/** The suffix that keeps a song's two-hand version and its records apart from the melody's. */
+const BOTH_SUFFIX = ":both";
 
 /**
  * How many notes one melody may hold.
@@ -75,25 +107,17 @@ const MAX_NOTES = 2_000;
  * @throws When the melody cannot be read, cannot be written, or will not fit the keyboard
  */
 export function song(spec: SongSpec): Song {
-  const { mml, clef = "treble", ...rest } = spec;
+  const { mml, left, clef = "treble", ...rest } = spec;
   const { notes, bars, bpm } = readMml(mml, spec.beatsPerBar);
-  if (notes.length === 0) throw new Error("音符がひとつもありません。");
-  if (notes.length > MAX_NOTES) {
-    throw new Error(
-      `音符が${notes.length}個あります。${MAX_NOTES}個までです。`,
-    );
-  }
-
-  const pitches = notes.map((note) => note.midi);
-  const lowest = Math.min(...pitches);
-  const highest = Math.max(...pitches);
+  checkCount(notes);
+  const { lowest, highest } = rangeOf(notes);
 
   // The keyboard is one fixed width for every song, so a song too wide for it
   // has to be caught here — at import, which means at build — rather than
   // narrowing the keys for everyone else.
   keyRange(lowest, highest);
 
-  return {
+  const melody: Song = {
     ...rest,
     clef,
     bpm,
@@ -103,6 +127,64 @@ export function song(spec: SongSpec): Song {
     lowest,
     highest,
   };
+  if (left === undefined) return melody;
+  return { ...melody, both: twoHands(melody, mml, left) };
+}
+
+/**
+ * The two-hand version of a song: its melody on one staff and the left hand on another.
+ *
+ * Both hands are read as one piece of MML, so they are held to each other's bar lines, length and
+ * tempo by the same checks that hold the parts of a chord together. There is no keyboard on screen
+ * in this mode — it is played on a MIDI keyboard — so the left hand has no range to fit.
+ */
+function twoHands(melody: Song, mml: string, left: string): Song {
+  const { beatsPerBar } = melody;
+  const rightParts = readMml(mml, beatsPerBar).voices.length;
+  const both = readMml(`${mml},${left}`, beatsPerBar);
+  if (both.bars !== melody.bars) {
+    throw new Error(
+      `左手が${both.bars}小節、右手が${melody.bars}小節です。同じ長さにしてください。`,
+    );
+  }
+
+  const leftNotes = inOrder(both.voices.slice(rightParts).flat());
+  if (leftNotes.length === 0) {
+    throw new Error("左手に音符がひとつもありません。");
+  }
+  checkCount(both.notes);
+
+  const staff = (clef: ClefName, notes: Note[]): Staff => ({
+    clef,
+    notes,
+    rests: silences(notes, beatsPerBar, melody.bars),
+    ...rangeOf(notes),
+  });
+
+  return {
+    ...melody,
+    id: melody.id + BOTH_SUFFIX,
+    notes: both.notes,
+    ...rangeOf(both.notes),
+    staves: [
+      staff(melody.clef, [...melody.notes]),
+      staff("bass", leftNotes),
+    ],
+  };
+}
+
+function checkCount(notes: readonly Note[]): void {
+  if (notes.length === 0) throw new Error("音符がひとつもありません。");
+  if (notes.length > MAX_NOTES) {
+    throw new Error(
+      `音符が${notes.length}個あります。${MAX_NOTES}個までです。`,
+    );
+  }
+}
+
+function rangeOf(notes: readonly Note[]): { lowest: number; highest: number } {
+  const pitches = notes.map((note) => note.midi);
+  return { lowest: Math.min(...pitches), highest: Math.max(...pitches) };
 }
 
 export const SONGS: readonly Song[] = [
@@ -320,6 +402,11 @@ export const SONGS: readonly Song[] = [
     `,
   }),
 ];
+
+/** The songs that have a left hand written for them, as their two-hand versions. */
+export const BOTH_SONGS: readonly Song[] = SONGS.flatMap((one) =>
+  one.both === undefined ? [] : [one.both]
+);
 
 /** Looks a song up by id, falling back to the first one. */
 export function songById(id: string): Song {

@@ -55,6 +55,11 @@ export interface StageView {
   /** The song's lowest and highest notes, so the staff can sit where they all fit. */
   lowest: number;
   highest: number;
+  /**
+   * Whether this staff carries the readouts — score, combo, the count-in and the judgement word.
+   * With two hands there are two staves and one set of readouts, on the top one.
+   */
+  hud: boolean;
 }
 
 const BACKGROUND_TOP = "#2b1d15";
@@ -139,18 +144,19 @@ export class Stage {
     drawBackground(context, metrics);
     drawStaffLines(context, metrics);
     drawBarLines(context, metrics, view);
-    drawCountIn(context, metrics, view);
+    if (view.hud) drawCountIn(context, metrics, view);
     for (const rest of view.rests) drawRest(context, metrics, view, rest);
     for (const note of view.notes) drawNote(context, metrics, view, note);
     drawClef(context, metrics);
     drawHitLine(context, metrics);
-    drawHud(context, metrics, view);
+    if (view.hud) drawHud(context, metrics, view);
   }
 
   #metrics(view: StageView): Metrics {
     const width = this.#width;
     const height = this.#height;
-    const space = Math.min((height - HUD_HEIGHT) / 8.5, 34);
+    const top = view.hud ? HUD_HEIGHT : 0;
+    const space = Math.min((height - top) / 8.5, 34);
     const hitX = Math.max(78, width * 0.22);
     const clef = CLEFS[view.clef];
     const bottomStep = staffStep(clef.bottom);
@@ -159,7 +165,7 @@ export class Stage {
       width,
       height,
       space,
-      middle: middleOf(view, height, space, bottomStep, middleStep),
+      middle: middleOf(view, height, space, bottomStep, middleStep, top),
       hitX,
       clefRight: 16 + space * 2.6,
       pixelsPerBeat: (width - hitX) / view.lookahead,
@@ -184,19 +190,21 @@ function middleOf(
   space: number,
   bottomStep: number,
   middleStep: number,
+  /** Where the room for the staff starts: below the readouts, when this staff has them. */
+  hud: number,
 ): number {
-  const middle = HUD_HEIGHT + (height - HUD_HEIGHT) * 0.52;
+  const middle = hud + (height - hud) * 0.52;
   const y = (step: number) => middle - (step - middleStep) * space / 2;
   // A head is a space tall, and a ledger line reaches past it; leave room for both.
   const margin = space * 0.75;
   const top = y(Math.max(bottomStep + 8, staffStep(view.highest))) - margin;
   const bottom = y(Math.min(bottomStep, staffStep(view.lowest))) + margin;
 
-  if (bottom - top > height - HUD_HEIGHT) {
+  if (bottom - top > height - hud) {
     // Taller than the canvas: centre it and lose as little as possible at each end.
-    return middle + (HUD_HEIGHT + height) / 2 - (top + bottom) / 2;
+    return middle + (hud + height) / 2 - (top + bottom) / 2;
   }
-  return middle + Math.max(0, HUD_HEIGHT - top) - Math.max(0, bottom - height);
+  return middle + Math.max(0, hud - top) - Math.max(0, bottom - height);
 }
 
 /** Vertical position of a diatonic step. */
